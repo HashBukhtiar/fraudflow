@@ -20,7 +20,6 @@ import os
 from datetime import datetime, timezone
 
 import anthropic
-from dotenv import load_dotenv
 from sqlmodel import Session
 
 from ..models import (
@@ -31,8 +30,6 @@ from ..models import (
     RiskSignals,
     Verdict,
 )
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
