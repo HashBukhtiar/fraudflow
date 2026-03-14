@@ -5,59 +5,72 @@ interface AlertsFeedProps {
   alerts: AlertEvent[]
 }
 
-const severityConfig: Record<string, { border: string; dot: string; label: string }> = {
-  low: { border: 'border-l-primary', dot: 'bg-primary', label: 'text-primary' },
-  medium: { border: 'border-l-amber-500', dot: 'bg-amber-500', label: 'text-amber-600' },
-  high: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive' },
-  info: { border: 'border-l-primary', dot: 'bg-primary', label: 'text-primary' },
-  warning: { border: 'border-l-amber-500', dot: 'bg-amber-500', label: 'text-amber-600' },
-  critical: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive' },
+const severityConfig: Record<string, { border: string; dot: string; label: string; bg: string }> = {
+  low:      { border: 'border-l-primary',     dot: 'bg-primary',     label: 'text-primary',    bg: '' },
+  medium:   { border: 'border-l-amber-500',   dot: 'bg-amber-500',   label: 'text-amber-600',  bg: '' },
+  high:     { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive', bg: 'bg-destructive/5' },
+  info:     { border: 'border-l-primary',     dot: 'bg-primary',     label: 'text-primary',    bg: '' },
+  warning:  { border: 'border-l-amber-500',   dot: 'bg-amber-500',   label: 'text-amber-600',  bg: '' },
+  critical: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive', bg: 'bg-destructive/5' },
+}
+
+function timeAgo(iso: string) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diff < 60) return 'Just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return new Date(iso).toLocaleDateString()
 }
 
 export default function AlertsFeed({ alerts }: AlertsFeedProps) {
+  const unseen = (alerts as any[]).filter((a) => !a.seen).length
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Recent Alerts
-        </p>
-        {alerts.length > 0 && (
-          <span className="text-xs text-muted-foreground">
-            {alerts.length} alert{alerts.length !== 1 ? 's' : ''}
-          </span>
-        )}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-sm">Security Notifications</p>
+          {unseen > 0 && (
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+              {unseen}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{alerts.length} total</p>
       </div>
 
+      {alerts.length === 0 && (
+        <div className="py-10 text-center border border-dashed border-border rounded-xl">
+          <p className="text-sm font-medium text-muted-foreground">All clear</p>
+          <p className="text-xs text-muted-foreground mt-1">No security alerts on your account.</p>
+        </div>
+      )}
+
       <div className="space-y-2">
-        {alerts.length === 0 && (
-          <p className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-lg">
-            No alerts.
-          </p>
-        )}
-        {alerts.map((alert) => {
-          const a = alert as any
-          const cfg = severityConfig[a.severity] ?? severityConfig.info
+        {(alerts as any[]).map((alert) => {
+          const cfg = severityConfig[alert.severity] ?? severityConfig.info
+          const ts = alert.timestamp ?? alert.triggered_at
+          const msg = alert.message ?? alert.description
           return (
             <div
-              key={a.id}
+              key={alert.id}
               className={cn(
-                'border border-border border-l-2 rounded-md px-3 py-2.5',
+                'flex gap-3 border border-border border-l-2 rounded-lg px-4 py-3',
                 cfg.border,
-                !a.seen && 'bg-muted/30',
+                cfg.bg,
+                !alert.seen && 'bg-muted/20',
               )}
             >
-              <div className="flex items-center justify-between gap-2 mb-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', cfg.dot)} />
-                  <span className={cn('text-xs font-semibold capitalize', cfg.label)}>
-                    {a.severity}
-                  </span>
-                </div>
-                <span className="text-xs text-muted-foreground font-mono">
-                  {new Date(a.timestamp ?? a.triggered_at).toLocaleTimeString()}
-                </span>
+              <div className="mt-0.5 shrink-0">
+                <span className={cn('block w-2 h-2 rounded-full mt-1', cfg.dot)} />
               </div>
-              <p className="text-sm text-foreground/80 pl-3">{a.message ?? a.description}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-foreground/85 leading-snug">{msg}</p>
+                <p className="text-xs text-muted-foreground mt-1">{timeAgo(ts)}</p>
+              </div>
+              {!alert.seen && (
+                <span className="shrink-0 text-xs font-medium text-muted-foreground mt-0.5">New</span>
+              )}
             </div>
           )
         })}
