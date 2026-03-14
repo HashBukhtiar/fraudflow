@@ -35,28 +35,29 @@ export default function AlertsFeed({ alerts }: AlertsFeedProps) {
           </p>
         )}
         {alerts.map((alert) => {
-          const cfg = severityConfig[alert.severity]
+          const a = alert as any
+          const cfg = severityConfig[a.severity] ?? severityConfig.info
           return (
             <div
-              key={alert.id}
+              key={a.id}
               className={cn(
                 'border border-border border-l-2 rounded-md px-3 py-2.5',
                 cfg.border,
-                !alert.seen && 'bg-muted/30',
+                !a.seen && 'bg-muted/30',
               )}
             >
               <div className="flex items-center justify-between gap-2 mb-0.5">
                 <div className="flex items-center gap-1.5">
                   <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', cfg.dot)} />
                   <span className={cn('text-xs font-semibold capitalize', cfg.label)}>
-                    {alert.severity}
+                    {a.severity}
                   </span>
                 </div>
                 <span className="text-xs text-muted-foreground font-mono">
-                  {new Date(alert.timestamp).toLocaleTimeString()}
+                  {new Date(a.timestamp ?? a.triggered_at).toLocaleTimeString()}
                 </span>
               </div>
-              <p className="text-sm text-foreground/80 pl-3">{alert.message}</p>
+              <p className="text-sm text-foreground/80 pl-3">{a.message ?? a.description}</p>
             </div>
           )
         })}
