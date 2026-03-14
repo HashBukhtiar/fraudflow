@@ -206,7 +206,7 @@ function CapabilitiesSection() {
           >
             Everything you need.
             <br />
-            <span className="text-muted-foreground">Nothing you don't.</span>
+            <span className="text-primary">Nothing you don't.</span>
           </h2>
         </div>
         <div>
