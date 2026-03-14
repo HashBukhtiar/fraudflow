@@ -151,6 +151,9 @@ def _parse_response(raw: str) -> tuple[Verdict, float, str, str]:
         text = text.split("```", 2)[1]
         if text.startswith("json"):
             text = text[4:]
+    # strip trailing fence if present
+    if text.endswith("```"):
+        text = text[:-3]
     text = text.strip()
 
     data = json.loads(text)

@@ -1,5 +1,5 @@
 import axios from 'axios'
-import type { AppProfile, APICallLog, AlertEvent, FraudDecision } from './types'
+import type { AppProfile, APICallLog, AlertEvent, FraudDecision, RiskSignals } from './types'
 
 const api = axios.create({
   baseURL: 'http://localhost:8000',
@@ -18,7 +18,10 @@ export const getAlerts = () =>
 export const getDecisions = () =>
   api.get<FraudDecision[]>('/api/decisions').then((r) => r.data)
 
+export const getProfile = (appId: string) =>
+  api.get<RiskSignals>(`/api/profile/${appId}`).then((r) => r.data)
+
 export const triggerScenario = (scenario: string) =>
-  api.post(`/api/demo/trigger/${scenario}`).then((r) => r.data)
+  api.post<FraudDecision>(`/api/demo/trigger/${scenario}`).then((r) => r.data)
 
 export default api
