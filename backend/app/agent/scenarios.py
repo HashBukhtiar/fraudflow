@@ -109,17 +109,19 @@ def scenario_rogue_budgeting_app(db: Session) -> FraudDecision:
 # ---------------------------------------------------------------------------
 
 def scenario_payment_anomaly(db: Session) -> FraudDecision:
-    """QuickPay fires 8 payments just under $10,000 within 3 minutes.
+    """QuickPay fires 8 payments just under $10,000 at 2am within a few minutes.
 
     Signals fired:
+      • off_hours_ratio = 1.0         (all calls between 02:00–02:16)
       • call_rate_per_minute high     (8 calls in < 3 min)
-      • benford_score high            (all amounts start with 9 — structuring pattern)
+      • benford_score / structuring   (all amounts in $8k–$10k band → structuring)
       • trust_score low               (QuickPay has low trust)
     """
     app = _load_app("QuickPay", db)
     now = datetime.now(timezone.utc)
 
-    # All 8 calls within the last 3 minutes so call_rate fires
+    # All 8 calls at 2am within a 3-minute window — overnight structuring burst
+    today_2am = now.replace(hour=2, minute=0, second=0, microsecond=0)
     amounts = [9800.0, 9750.0, 9900.0, 9850.0, 9820.0, 9780.0, 9920.0, 9870.0]
 
     logs = [
@@ -127,7 +129,7 @@ def scenario_payment_anomaly(db: Session) -> FraudDecision:
             app_id=app.app_id,
             endpoint="/open-banking/payments",
             http_method="POST",
-            timestamp=now - timedelta(seconds=i * 20),
+            timestamp=today_2am + timedelta(seconds=i * 20),
             status_code=200,
             response_time_ms=95.0,
             amount=amounts[i],
