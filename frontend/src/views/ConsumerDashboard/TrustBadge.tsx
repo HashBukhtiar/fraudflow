@@ -6,12 +6,14 @@ interface TrustBadgeProps {
 }
 
 export default function TrustBadge({ score, className }: TrustBadgeProps) {
-  const pct = Math.round(score * 100)
+  // Backend stores trust_score on a 0–10 scale; normalise to 0–1 for display
+  const normalised = score / 10
+  const pct = Math.round(normalised * 100)
 
   const color =
-    score >= 0.7
+    normalised >= 0.7
       ? 'bg-green-100 text-green-800 border-green-200'
-      : score >= 0.4
+      : normalised >= 0.4
         ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
         : 'bg-red-100 text-red-800 border-red-200'
 
@@ -26,9 +28,9 @@ export default function TrustBadge({ score, className }: TrustBadgeProps) {
       <span
         className={cn(
           'w-1.5 h-1.5 rounded-full',
-          score >= 0.7
+          normalised >= 0.7
             ? 'bg-green-500'
-            : score >= 0.4
+            : normalised >= 0.4
               ? 'bg-yellow-500'
               : 'bg-red-500',
         )}

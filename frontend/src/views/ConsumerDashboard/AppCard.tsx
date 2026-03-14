@@ -7,13 +7,11 @@ interface AppCardProps {
   app: AppProfile
 }
 
-const statusVariant: Record<AppProfile['status'], 'default' | 'secondary' | 'destructive'> = {
-  active: 'default',
-  flagged: 'secondary',
-  suspended: 'destructive',
-}
-
 export default function AppCard({ app }: AppCardProps) {
+  const permissions = app.permissions
+    ? app.permissions.split(',').map((p) => p.trim()).filter(Boolean)
+    : []
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -21,8 +19,11 @@ export default function AppCard({ app }: AppCardProps) {
           <CardTitle className="text-base">{app.name}</CardTitle>
           <div className="flex items-center gap-1.5 shrink-0">
             <TrustBadge score={app.trust_score} />
-            <Badge variant={statusVariant[app.status]} className="capitalize text-xs">
-              {app.status}
+            <Badge
+              variant={app.is_active ? 'default' : 'destructive'}
+              className="capitalize text-xs"
+            >
+              {app.is_active ? 'active' : 'suspended'}
             </Badge>
           </div>
         </div>
@@ -31,17 +32,19 @@ export default function AppCard({ app }: AppCardProps) {
       <CardContent>
         <p className="text-xs font-medium text-muted-foreground mb-1">Permissions</p>
         <div className="flex flex-wrap gap-1">
-          {app.permissions_requested.map((p) => (
+          {permissions.length > 0 ? permissions.map((p) => (
             <span
               key={p}
               className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-xs"
             >
               {p}
             </span>
-          ))}
+          )) : (
+            <span className="text-xs text-muted-foreground">None declared</span>
+          )}
         </div>
         <p className="text-xs text-muted-foreground mt-3">
-          Registered {new Date(app.registration_date).toLocaleDateString()}
+          Registered {new Date(app.registered_at).toLocaleDateString()}
         </p>
       </CardContent>
     </Card>

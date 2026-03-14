@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getApps, getDecisions } from '@/api/client'
+import api from '@/api/client'
 import type { AppProfile, APICallLog, FraudDecision } from '@/api/types'
 import RiskRankList from './RiskRankList'
 import CallFeed from './CallFeed'
@@ -9,108 +10,125 @@ import { cn } from '@/lib/utils'
 
 const MOCK_APPS: AppProfile[] = [
   {
-    id: '1',
+    id: 1,
+    app_id: 'budgetbuddy',
     name: 'BudgetBuddy',
     category: 'budgeting',
-    permissions_requested: ['read:accounts', 'read:transactions'],
-    registration_date: '2024-06-15',
-    trust_score: 0.85,
-    status: 'active',
+    description: 'Personal budget tracking app',
+    registered_at: '2024-06-15T00:00:00Z',
+    trust_score: 8.5,
+    trust_level: 'HIGH',
+    permissions: 'read:accounts,read:transactions',
+    is_active: true,
   },
   {
-    id: '2',
+    id: 2,
+    app_id: 'quickpay',
     name: 'QuickPay',
     category: 'payments',
-    permissions_requested: ['read:accounts', 'write:payments', 'read:transactions'],
-    registration_date: '2024-11-02',
-    trust_score: 0.40,
-    status: 'flagged',
+    description: 'Fast payment processing',
+    registered_at: '2024-11-02T00:00:00Z',
+    trust_score: 4.0,
+    trust_level: 'MEDIUM',
+    permissions: 'read:accounts,write:payments,read:transactions',
+    is_active: true,
   },
   {
-    id: '3',
+    id: 3,
+    app_id: 'taxeasy',
     name: 'TaxEasy',
     category: 'tax',
-    permissions_requested: ['read:accounts', 'read:transactions', 'read:balances', 'write:consent'],
-    registration_date: '2026-03-12',
-    trust_score: 0.10,
-    status: 'active',
+    description: 'Tax filing assistant',
+    registered_at: '2026-03-12T00:00:00Z',
+    trust_score: 1.0,
+    trust_level: 'NEW',
+    permissions: 'read:accounts,read:transactions,read:balances,write:consent',
+    is_active: true,
   },
 ]
 
 const MOCK_CALLS: APICallLog[] = [
   {
-    id: 'c1', app_id: '1', user_id: 'u1', endpoint: '/open-banking/transactions',
-    timestamp: new Date(Date.now() - 60000).toISOString(), time_of_day_hour: 3,
-    data_volume_kb: 48, permission_scope_used: 'write:payments', allowed: false,
-    scenario_tag: 'rogue_app',
+    id: 1, app_id: 'budgetbuddy', user_id: null,
+    endpoint: '/open-banking/transactions', http_method: 'GET',
+    timestamp: new Date(Date.now() - 60000).toISOString(),
+    status_code: 403, response_time_ms: 12, amount: null,
+    ip_address: null, flagged: true, time_of_day_hour: 3,
+    data_volume_kb: 0, permission_scope_used: 'write:payments', scenario_tag: 'rogue_budgeting_app',
   },
   {
-    id: 'c2', app_id: '2', user_id: 'u1', endpoint: '/open-banking/payments',
-    timestamp: new Date(Date.now() - 120000).toISOString(), time_of_day_hour: 3,
-    data_volume_kb: 12, permission_scope_used: 'write:payments', allowed: false,
-    scenario_tag: 'transaction_anomaly',
+    id: 2, app_id: 'quickpay', user_id: null,
+    endpoint: '/open-banking/payments', http_method: 'POST',
+    timestamp: new Date(Date.now() - 120000).toISOString(),
+    status_code: 403, response_time_ms: 10, amount: 9800,
+    ip_address: null, flagged: true, time_of_day_hour: 2,
+    data_volume_kb: 0, permission_scope_used: 'write:payments', scenario_tag: 'payment_anomaly',
   },
   {
-    id: 'c3', app_id: '3', user_id: 'u2', endpoint: '/open-banking/accounts',
-    timestamp: new Date(Date.now() - 180000).toISOString(), time_of_day_hour: 14,
-    data_volume_kb: 200, permission_scope_used: 'read:accounts', allowed: true,
-    scenario_tag: null,
-  },
-  {
-    id: 'c4', app_id: '1', user_id: 'u1', endpoint: '/open-banking/accounts',
-    timestamp: new Date(Date.now() - 240000).toISOString(), time_of_day_hour: 14,
-    data_volume_kb: 8, permission_scope_used: 'read:accounts', allowed: true,
-    scenario_tag: null,
+    id: 3, app_id: 'taxeasy', user_id: null,
+    endpoint: '/open-banking/accounts', http_method: 'GET',
+    timestamp: new Date(Date.now() - 180000).toISOString(),
+    status_code: 200, response_time_ms: 80, amount: null,
+    ip_address: null, flagged: false, time_of_day_hour: 14,
+    data_volume_kb: 12, permission_scope_used: 'read:accounts', scenario_tag: null,
   },
 ]
 
 const MOCK_DECISIONS: FraudDecision[] = [
   {
-    id: 'd1', app_id: '1', verdict: 'BLOCK', confidence: 0.94,
+    id: 1, app_id: 'budgetbuddy', risk_signals_id: 1,
+    decided_at: new Date(Date.now() - 60000).toISOString(),
+    verdict: 'BLOCK', confidence: 0.94,
     explanation: 'BudgetBuddy attempted to initiate a payment — outside its declared budgeting scope. Overnight access at 3am combined with scope mismatch triggers an automatic block.',
-    recommended_action: 'Revoke payment permission and notify user.',
-    timestamp: new Date(Date.now() - 60000).toISOString(), memory_context_used: true,
+    recommended_action: 'revoke_token',
   },
   {
-    id: 'd2', app_id: '3', verdict: 'BLOCK', confidence: 0.97,
-    explanation: 'TaxEasy was registered 2 days ago and is requesting permissions far exceeding what a tax app requires. Benford deviation score of 0.78 suggests synthetic data patterns.',
-    recommended_action: 'Block all requests and flag for manual review.',
-    timestamp: new Date(Date.now() - 120000).toISOString(), memory_context_used: true,
+    id: 2, app_id: 'taxeasy', risk_signals_id: 2,
+    decided_at: new Date(Date.now() - 120000).toISOString(),
+    verdict: 'BLOCK', confidence: 0.97,
+    explanation: 'TaxEasy was registered 2 days ago and is requesting permissions far exceeding what a tax app requires. Benford deviation score suggests synthetic data patterns.',
+    recommended_action: 'revoke_token',
   },
   {
-    id: 'd3', app_id: '2', verdict: 'FLAG', confidence: 0.76,
-    explanation: 'QuickPay is initiating a high-value payment for a user with no prior payment history through this app. Pattern matches known social-engineering vectors.',
-    recommended_action: 'Request explicit user confirmation before processing.',
-    timestamp: new Date(Date.now() - 300000).toISOString(), memory_context_used: false,
+    id: 3, app_id: 'quickpay', risk_signals_id: 3,
+    decided_at: new Date(Date.now() - 300000).toISOString(),
+    verdict: 'FLAG', confidence: 0.76,
+    explanation: 'QuickPay is initiating high-value payments in rapid succession — a structuring pattern. Request flagged for manual review.',
+    recommended_action: 'flag_for_review',
   },
 ]
 
 const verdictColor: Record<FraudDecision['verdict'], string> = {
-  APPROVE: 'bg-green-100 text-green-800',
-  FLAG: 'bg-yellow-100 text-yellow-800',
+  ALLOW: 'bg-green-100 text-green-800',
+  FLAG:  'bg-yellow-100 text-yellow-800',
   BLOCK: 'bg-red-100 text-red-800',
 }
 
 export default function AnalystDashboard() {
   const [apps, setApps] = useState<AppProfile[]>(MOCK_APPS)
-  const [calls] = useState<APICallLog[]>(MOCK_CALLS)
+  const [calls, setCalls] = useState<APICallLog[]>(MOCK_CALLS)
   const [decisions, setDecisions] = useState<FraudDecision[]>(MOCK_DECISIONS)
   const [selected, setSelected] = useState<FraudDecision | null>(null)
 
   useEffect(() => {
-    Promise.all([getApps(), getDecisions()])
-      .then(([appsData, decisionsData]) => {
+    Promise.all([
+      getApps(),
+      getDecisions(),
+      api.get<APICallLog[]>('/api/calls', { params: { limit: 50 } }).then((r) => r.data),
+    ])
+      .then(([appsData, decisionsData, callsData]) => {
         setApps(appsData)
         setDecisions(decisionsData)
+        setCalls(callsData)
       })
       .catch(() => {
-        // fall back to mock data
+        // backend not running — fall back to mock data
       })
   }, [])
 
   const blocked = decisions.filter((d) => d.verdict === 'BLOCK').length
   const flagged = decisions.filter((d) => d.verdict === 'FLAG').length
-  const blockedCalls = calls.filter((c) => !c.allowed).length
+  const blockedCalls = calls.filter((c) => c.flagged).length
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -167,7 +185,7 @@ export default function AnalystDashboard() {
             </thead>
             <tbody>
               {decisions.map((d) => {
-                const app = apps.find((a) => a.id === d.app_id)
+                const app = apps.find((a) => a.app_id === d.app_id)
                 return (
                   <tr
                     key={d.id}
@@ -184,12 +202,19 @@ export default function AnalystDashboard() {
                       {Math.round(d.confidence * 100)}%
                     </td>
                     <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(d.timestamp).toLocaleTimeString()}
+                      {new Date(d.decided_at).toLocaleTimeString()}
                     </td>
                     <td className="px-4 py-2 text-xs text-primary">Details →</td>
                   </tr>
                 )
               })}
+              {decisions.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground text-xs">
+                    No decisions yet. Run a demo scenario to generate one.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </CardContent>
