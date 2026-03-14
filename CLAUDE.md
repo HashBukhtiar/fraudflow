@@ -64,7 +64,7 @@ cd backend && pip install -r requirements.txt
 uvicorn main:app --reload
 
 # Frontend  
-cd frontend && npm install && npm run dev
+cd frontend && bun install && bun run dev
 ```
 
 ## What "Done" Looks Like Per Module
