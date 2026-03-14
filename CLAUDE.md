@@ -24,7 +24,7 @@ End-to-end demo flow:
 - Frontend: React + Vite + Tailwind + shadcn/ui
 - Data: SQLite + SQLModel
 - Memory: Moorcheh
-- AI: Claude or GPT-4o
+- AI: Use claude-haiku-4-5-20251001 via the Anthropic SDK. API key is in .env as ANTHROPIC_API_KEY.
 
 ## Project Structure
 fraudflow/
@@ -97,6 +97,40 @@ Core models:
 
 Do not change model shapes without team agreement.
 
+## Seed Apps (data/seeds/apps.json)
+Three apps minimum:
+- BudgetBuddy (category: budgeting, trust_score: 0.85, status: active)
+- QuickPay (category: payments, trust_score: 0.40, status: flagged)  
+- TaxEasy (category: tax, trust_score: 0.10, status: active, 
+    registered 2 days ago)
+These are the three demo scenario apps. Do not rename them.
+
+## Model Field Specs
+
+AppProfile: id, name, category, permissions_requested (list), 
+  registration_date, trust_score (float 0-1), status (active/suspended)
+
+APICallLog: id, app_id, user_id, endpoint, timestamp, time_of_day_hour,
+  data_volume_kb, permission_scope_used, allowed (bool), scenario_tag
+
+RiskSignals: app_id, scope_mismatch (bool), overnight_access (bool),
+  high_frequency (bool), endpoint_category_mismatch (bool), new_app_risk (bool),
+  benford_deviation_score (float), overall_risk_score (float)
+
+FraudDecision: id, app_id, verdict (APPROVE/FLAG/BLOCK), confidence (float),
+  explanation (str), recommended_action (str), timestamp, memory_context_used (bool)
+
+AlertEvent: id, app_id, decision_id, severity (low/medium/high), 
+  message (str), timestamp, seen (bool)
+
+## Module Ownership
+- backend/app/gateway/ → Person A only
+- backend/app/profiler/ → Person B only
+- backend/app/memory/ → Person B only
+- backend/app/agent/ → Person B only
+- frontend/src/ → Person C only
+- backend/app/models.py → all three must agree before changing
+
 ## API Contracts
 Frontend depends on:
 - GET /api/apps
@@ -147,3 +181,15 @@ Do not build first:
 10. analyst dashboard
 11. scenario triggers
 12. polish
+
+## Running Locally
+# Backend
+cd backend && pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Frontend
+cd frontend && npm install && npm run dev
+# runs on port 5173
+
+# Seed data
+python backend/data/seed.py
