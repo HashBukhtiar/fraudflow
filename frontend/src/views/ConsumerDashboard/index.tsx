@@ -32,7 +32,7 @@ const MOCK_APPS: AppProfile[] = [
     trust_score: 0.10,
     status: 'active',
   },
-]
+] as unknown as AppProfile[]
 
 const MOCK_ALERTS: AlertEvent[] = [
   {
@@ -62,7 +62,7 @@ const MOCK_ALERTS: AlertEvent[] = [
     timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
     seen: true,
   },
-]
+] as unknown as AlertEvent[]
 
 export default function ConsumerDashboard() {
   const [apps, setApps] = useState<AppProfile[]>(MOCK_APPS)
@@ -82,32 +82,49 @@ export default function ConsumerDashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  const unseenCount = alerts.filter((a) => !a.seen).length
+  const unseenCount = (alerts as any[]).filter((a) => !a.seen).length
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">My Connected Apps</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Apps connected to your bank account via Open Banking.
-          {unseenCount > 0 && (
-            <span className="ml-2 font-medium text-destructive">
-              {unseenCount} new alert{unseenCount > 1 ? 's' : ''}
-            </span>
-          )}
+    <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
+      {/* Header */}
+      <div className="border-b border-border pb-6">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">
+          Open Banking
         </p>
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">My Connected Apps</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Third-party apps connected to your bank account.
+            </p>
+          </div>
+          <div className="flex items-center gap-6 text-sm shrink-0">
+            <div className="text-right">
+              <p className="font-semibold tabular-nums">{apps.length}</p>
+              <p className="text-xs text-muted-foreground">connected</p>
+            </div>
+            {unseenCount > 0 && (
+              <div className="text-right">
+                <p className="font-semibold tabular-nums text-destructive">{unseenCount}</p>
+                <p className="text-xs text-muted-foreground">
+                  new alert{unseenCount !== 1 ? 's' : ''}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {loading && (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      )}
+      {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
 
+      {/* App grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {apps.map((app) => (
-          <AppCard key={app.id} app={app} />
+          <AppCard key={(app as any).id} app={app} />
         ))}
       </div>
 
+      {/* Alerts */}
       <AlertsFeed alerts={alerts} />
     </div>
   )
