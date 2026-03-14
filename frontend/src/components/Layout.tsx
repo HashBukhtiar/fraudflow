@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 const navItems = [
   { to: '/consumer', label: 'Consumer' },
   { to: '/analyst', label: 'Analyst' },
+  { to: '/demo', label: 'Demo' },
 ]
 
 export default function Layout() {
