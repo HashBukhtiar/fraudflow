@@ -5,10 +5,13 @@ interface AlertsFeedProps {
   alerts: AlertEvent[]
 }
 
-const severityConfig: Record<AlertEvent['severity'], { border: string; dot: string; label: string }> = {
+const severityConfig: Record<string, { border: string; dot: string; label: string }> = {
   low: { border: 'border-l-primary', dot: 'bg-primary', label: 'text-primary' },
   medium: { border: 'border-l-amber-500', dot: 'bg-amber-500', label: 'text-amber-600' },
   high: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive' },
+  info: { border: 'border-l-primary', dot: 'bg-primary', label: 'text-primary' },
+  warning: { border: 'border-l-amber-500', dot: 'bg-amber-500', label: 'text-amber-600' },
+  critical: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive' },
 }
 
 export default function AlertsFeed({ alerts }: AlertsFeedProps) {
