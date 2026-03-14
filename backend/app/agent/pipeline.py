@@ -1,83 +1,73 @@
 """
-Fraud pipeline stub — placeholder for Feature 8 (AI Decision Engine).
+run_fraud_pipeline — wires profiler → memory → decision engine for one app.
 
-run_fraud_pipeline(app_id, session) is called as a FastAPI BackgroundTask
-after every logged gateway request. It will:
-  1. Run the profiler (scope + Benford + rate signals)
-  2. Query Moorcheh memory for past patterns
-  3. Call the LLM agent for a verdict
-  4. Persist FraudDecision + AlertEvent
-
-For now it runs the scope profiler only so the pipeline is live end-to-end
-and the agent integration (Feature 8) can be dropped in without touching the
-middleware or call sites.
+Called by Person A's gateway as a background task after logging each APICallLog.
 """
+
+from __future__ import annotations
 
 import logging
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
-from app.profiler.scope_rules import evaluate_scope_signals
-from app.models import AppProfile, APICallLog, RiskSignals
-from sqlmodel import select
+from ..models import APICallLog, AppProfile, FraudDecision
+from ..profiler.profiler import generate_risk_signals
+from ..memory.memory_store import query_similar_behavior, store_incident
+from .decision_engine import make_decision
 
-logger = logging.getLogger("fraudflow.pipeline")
+logger = logging.getLogger(__name__)
 
 
-def run_fraud_pipeline(app_id: str, session: Session) -> None:
+def run_fraud_pipeline(app_id: str, db: Session) -> FraudDecision:
+    """Evaluate fraud risk for *app_id* using its 20 most recent API calls.
+
+    Steps:
+      1. Load AppProfile from DB
+      2. Load last 20 APICallLog records (newest first)
+      3. generate_risk_signals  → RiskSignals
+      4. query_similar_behavior → memory context string
+      5. make_decision          → saves RiskSignals + FraudDecision + AlertEvent
+      6. store_incident         → update in-memory store for future queries
+      7. Return FraudDecision
+
+    Raises:
+        ValueError: if app_id does not exist in the database.
     """
-    Entry point called as a background task after every gateway request.
+    # 1. Load app
+    app = db.exec(
+        select(AppProfile).where(AppProfile.app_id == app_id)
+    ).first()
+    if app is None:
+        raise ValueError(f"App '{app_id}' not found in database")
 
-    Current behaviour (stub):
-      - Fetches the AppProfile and last 50 calls
-      - Runs scope/permission profiler
-      - Persists a RiskSignals row
-      - Logs the composite_risk_score
+    # 2. Load recent calls
+    recent_calls = list(
+        db.exec(
+            select(APICallLog)
+            .where(APICallLog.app_id == app_id)
+            .order_by(APICallLog.timestamp.desc())  # type: ignore[arg-type]
+            .limit(20)
+        ).all()
+    )
+    logger.debug("pipeline [%s]: %d recent calls loaded", app_id, len(recent_calls))
 
-    TODO (Feature 8): add Moorcheh memory lookup + LLM verdict + AlertEvent.
-    """
-    try:
-        app = session.exec(
-            select(AppProfile).where(AppProfile.app_id == app_id)
-        ).first()
+    # 3. Profiler
+    signals = generate_risk_signals(app, recent_calls)
+    logger.debug(
+        "pipeline [%s]: composite_risk_score=%.2f", app_id, signals.composite_risk_score
+    )
 
-        if not app:
-            logger.warning("pipeline: app '%s' not found — skipping", app_id)
-            return
+    # 4. Memory
+    memory_context = query_similar_behavior(app, signals)
 
-        recent_calls: list[APICallLog] = list(
-            session.exec(
-                select(APICallLog)
-                .where(APICallLog.app_id == app_id)
-                .order_by(APICallLog.timestamp.desc())  # type: ignore[arg-type]
-                .limit(50)
-            ).all()
-        )
+    # 5. Decision (persists signals + decision + alert to DB)
+    decision = make_decision(app, signals, memory_context, db)
+    logger.info(
+        "pipeline [%s]: verdict=%s confidence=%.0f%%",
+        app_id, decision.verdict.value, decision.confidence * 100,
+    )
 
-        signals = evaluate_scope_signals(app, recent_calls)
+    # 6. Feed result back into memory for future queries
+    store_incident(decision, app)
 
-        risk = RiskSignals(
-            app_id=app_id,
-            excessive_permissions=signals["excessive_permissions"],
-            permission_scope_count=signals["permission_scope_count"],
-            unusual_endpoint_ratio=signals["unusual_endpoint_ratio"],
-            app_age_hours=signals["app_age_hours"],
-            benford_score=signals["benford_score"],
-            benford_deviation=signals["benford_deviation"],
-            call_rate_per_minute=signals["call_rate_per_minute"],
-            off_hours_ratio=signals["off_hours_ratio"],
-            composite_risk_score=signals["composite_risk_score"],
-        )
-        session.add(risk)
-        session.commit()
-
-        logger.info(
-            "pipeline: app=%s risk_score=%.2f excessive_permissions=%s unusual_endpoint_ratio=%.2f",
-            app_id,
-            signals["composite_risk_score"],
-            signals["excessive_permissions"],
-            signals["unusual_endpoint_ratio"],
-        )
-
-    except Exception:
-        logger.exception("pipeline: unhandled error for app '%s'", app_id)
+    return decision
