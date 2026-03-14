@@ -7,7 +7,7 @@ interface AppCardProps {
   app: AppProfile
 }
 
-const statusConfig: Record<AppProfile['status'], string> = {
+const statusConfig: Record<string, string> = {
   active: 'bg-primary/10 text-primary border-primary/20',
   flagged: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
   suspended: 'bg-destructive/10 text-destructive border-destructive/20',
