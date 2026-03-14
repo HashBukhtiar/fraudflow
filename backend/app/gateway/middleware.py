@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timezone
 from typing import Annotated, Callable
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, Header, HTTPException, Request
 from sqlmodel import Session, select
 
 from app.database import get_session
@@ -115,9 +115,12 @@ def require_scope(required_scope: str) -> Callable:
 
     def dependency(
         request: Request,
+        background_tasks: BackgroundTasks,
         x_app_id: Annotated[str | None, Header()] = None,
         session: Session = Depends(get_session),
     ) -> AppProfile:
+        from app.agent.pipeline import run_fraud_pipeline  # local import avoids circular dep
+
         start = time.monotonic()
 
         endpoint = request.url.path
@@ -150,6 +153,7 @@ def require_scope(required_scope: str) -> Callable:
                 permission_scope_used=required_scope,
                 ip_address=ip,
             )
+            background_tasks.add_task(run_fraud_pipeline, app.app_id, session)
             raise HTTPException(
                 status_code=403,
                 detail=(
@@ -170,6 +174,7 @@ def require_scope(required_scope: str) -> Callable:
             permission_scope_used=required_scope,
             ip_address=ip,
         )
+        background_tasks.add_task(run_fraud_pipeline, app.app_id, session)
 
         return app
 
