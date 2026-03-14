@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.database import create_db_and_tables
 from app.gateway import openbanking_router, registry_router, telemetry_router
+from app.gateway.demo_routes import router as demo_router
+from app.gateway.read_routes import router as read_router
 from app.profiler.router import router as profiler_router
 from app.seed import run_seed
 
@@ -44,6 +46,8 @@ app.include_router(registry_router)
 app.include_router(openbanking_router)
 app.include_router(telemetry_router)
 app.include_router(profiler_router)
+app.include_router(demo_router)
+app.include_router(read_router)
 
 
 @app.get("/health", tags=["Meta"])

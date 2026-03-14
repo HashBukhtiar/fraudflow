@@ -2,9 +2,9 @@
 Seed data for FraudFlow demo scenarios.
 
 Three apps are seeded — each maps to one of the three demo scenarios:
-  - BudgetWise  → Scenario 1: rogue budgeting app
-  - PaySwift    → Scenario 2: suspicious payment request
-  - TaxEase     → Scenario 3: social-engineering tax app / data harvester
+  - BudgetBuddy → Scenario 1: rogue budgeting app
+  - QuickPay    → Scenario 2: suspicious payment request
+  - TaxEasy     → Scenario 3: social-engineering tax app / data harvester
 """
 
 from datetime import datetime, timezone
@@ -17,8 +17,8 @@ from app.models import AppCategory, AppProfile, TrustLevel
 
 SEED_APPS: list[dict] = [
     {
-        "app_id": "app_budgetwise",
-        "name": "BudgetWise",
+        "app_id": "budgetbuddy",
+        "name": "BudgetBuddy",
         "category": AppCategory.BUDGETING,
         "description": (
             "A personal budgeting app that connects to your bank to help you "
@@ -32,8 +32,8 @@ SEED_APPS: list[dict] = [
         "is_active": True,
     },
     {
-        "app_id": "app_payswift",
-        "name": "PaySwift",
+        "app_id": "quickpay",
+        "name": "QuickPay",
         "category": AppCategory.PAYMENTS,
         "description": (
             "A peer-to-peer payment app for splitting bills and sending money "
@@ -47,15 +47,15 @@ SEED_APPS: list[dict] = [
         "is_active": True,
     },
     {
-        "app_id": "app_taxease",
-        "name": "TaxEase",
+        "app_id": "taxeasy",
+        "name": "TaxEasy",
         "category": AppCategory.TAX,
         "description": (
             "An AI-powered tax filing assistant that imports your financial data "
             "to auto-fill your return."
         ),
         # Registered only ~48 hours before demo — triggers new-app risk signal
-        "registered_at": datetime(2025, 3, 12, 8, 0, 0, tzinfo=timezone.utc),
+        "registered_at": datetime(2026, 3, 12, 8, 0, 0, tzinfo=timezone.utc),
         "trust_score": 1.5,
         "trust_level": TrustLevel.NEW,
         # Excessive permissions: requesting payment initiation + full data
