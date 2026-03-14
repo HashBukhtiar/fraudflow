@@ -100,30 +100,83 @@ export default function ConsumerDashboard() {
   const unseenCount = alerts.filter((a) => !a.resolved).length
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">My Connected Apps</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Apps connected to your bank account via Open Banking.
-          {unseenCount > 0 && (
-            <span className="ml-2 font-medium text-destructive">
-              {unseenCount} new alert{unseenCount > 1 ? 's' : ''}
-            </span>
-          )}
-        </p>
+    <div className="min-h-screen bg-background">
+      {/* Bank portal header */}
+      <div className="border-b border-border bg-card">
+        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* TD-style logo mark — literal color so it never flashes on load */}
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+              style={{ backgroundColor: 'oklch(0.532 0.157 131.589)' }}
+            >
+              <span className="font-bold text-sm tracking-tight" style={{ color: 'oklch(0.986 0.031 120.757)' }}>TD</span>
+            </div>
+            <div>
+              <p className="font-semibold text-sm leading-tight">TD Bank</p>
+              <p className="text-xs text-muted-foreground">Open Banking</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {/* Notification bell */}
+            <div className="relative">
+              <button
+                className="w-9 h-9 rounded-lg border border-border bg-background flex items-center justify-center hover:bg-muted transition-colors"
+                aria-label="Notifications"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                </svg>
+              </button>
+              {unseenCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-destructive text-destructive-foreground rounded-full text-xs font-bold flex items-center justify-center leading-none">
+                  {unseenCount}
+                </span>
+              )}
+            </div>
+
+            {/* User avatar */}
+            <div className="w-9 h-9 rounded-full bg-muted border border-border flex items-center justify-center">
+              <span className="text-xs font-semibold text-muted-foreground">AJ</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {loading && (
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      )}
+      {/* Page content */}
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {apps.map((app) => (
-          <AppCard key={app.app_id} app={app} />
-        ))}
+        {/* Greeting */}
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Good morning, Alex.</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            You have <span className="font-medium text-foreground">{apps.length} apps</span> connected to your bank account
+            {unseenCount > 0 && (
+              <> and <span className="font-medium text-destructive">{unseenCount} new security alert{unseenCount !== 1 ? 's' : ''}</span></>
+            )}.
+          </p>
+        </div>
+
+        {loading && <p className="text-sm text-muted-foreground">Loading…</p>}
+
+        {/* Connected apps */}
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+            Connected Apps
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {apps.map((app) => (
+              <AppCard key={app.app_id} app={app} />
+            ))}
+          </div>
+        </div>
+
+        {/* Security notifications */}
+        <AlertsFeed alerts={alerts} />
+
       </div>
-
-      <AlertsFeed alerts={alerts} />
     </div>
   )
 }

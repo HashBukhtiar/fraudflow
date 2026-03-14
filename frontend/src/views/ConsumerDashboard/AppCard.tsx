@@ -1,51 +1,120 @@
-import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import TrustBadge from './TrustBadge'
+import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import type { AppProfile } from '@/api/types'
 
-interface AppCardProps {
-  app: AppProfile
+const permissionLabels: Record<string, string> = {
+  'read:accounts':      'View your accounts',
+  'read:transactions':  'View transaction history',
+  'write:payments':     'Make payments',
+  'read:balances':      'View account balances',
+  'write:consent':      'Manage consent settings',
 }
 
-export default function AppCard({ app }: AppCardProps) {
-  const permissions = app.permissions
-    ? app.permissions.split(',').map((p) => p.trim()).filter(Boolean)
-    : []
+const categoryLabel: Record<string, string> = {
+  budgeting:  'Budgeting',
+  payments:   'Payments',
+  tax:        'Tax & Filing',
+  lending:    'Lending',
+  investing:  'Investing',
+  other:      'Other',
+}
+
+const avatarPalette = [
+  'bg-blue-100 text-blue-700',
+  'bg-violet-100 text-violet-700',
+  'bg-orange-100 text-orange-700',
+  'bg-teal-100 text-teal-700',
+  'bg-rose-100 text-rose-700',
+]
+
+function avatarColor(name: string) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff
+  return avatarPalette[h % avatarPalette.length]
+}
+
+function trustLabel(norm: number) {
+  if (norm >= 0.7) return { label: 'Trusted',           dot: 'bg-primary',     text: 'text-primary' }
+  if (norm >= 0.4) return { label: 'Use with caution',  dot: 'bg-amber-500',   text: 'text-amber-600' }
+  return                        { label: 'High risk',          dot: 'bg-destructive', text: 'text-destructive' }
+}
+
+export default function AppCard({ app }: { app: AppProfile }) {
+  const norm = app.trust_score / 10
+  const trust = trustLabel(norm)
+  const initials = app.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+
+  // permissions is a comma-separated string from the backend
+  const permissions: string[] = (app.permissions ?? '')
+    .split(',').map((s: string) => s.trim()).filter(Boolean)
+
+  const isActive = app.is_active
+  const statusLabel = isActive ? 'Active' : 'Suspended'
+  const statusClass = isActive
+    ? 'bg-primary/10 text-primary border-primary/20'
+    : 'bg-destructive/10 text-destructive border-destructive/20'
+
+  const registeredAt = app.registered_at
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <CardTitle className="text-base">{app.name}</CardTitle>
-          <div className="flex items-center gap-1.5 shrink-0">
-            <TrustBadge score={app.trust_score} />
-            <Badge
-              variant={app.is_active ? 'default' : 'destructive'}
-              className="capitalize text-xs"
-            >
-              {app.is_active ? 'active' : 'suspended'}
-            </Badge>
+    <Card className="flex flex-col">
+      <CardContent className="pt-5 pb-4 flex flex-col gap-4">
+        {/* App header */}
+        <div className="flex items-start gap-3">
+          <div
+            className={cn(
+              'w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0',
+              avatarColor(app.name),
+            )}
+          >
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <p className="font-semibold text-sm leading-tight">{app.name}</p>
+              <span
+                className={cn(
+                  'shrink-0 inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium',
+                  statusClass,
+                )}
+              >
+                {statusLabel}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {categoryLabel[app.category] ?? app.category}
+            </p>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground capitalize">{app.category}</p>
-      </CardHeader>
-      <CardContent>
-        <p className="text-xs font-medium text-muted-foreground mb-1">Permissions</p>
-        <div className="flex flex-wrap gap-1">
-          {permissions.length > 0 ? permissions.map((p) => (
-            <span
-              key={p}
-              className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-xs"
-            >
-              {p}
-            </span>
-          )) : (
-            <span className="text-xs text-muted-foreground">None declared</span>
-          )}
+
+        {/* Security level */}
+        <div className="flex items-center gap-1.5">
+          <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', trust.dot)} />
+          <span className={cn('text-xs font-medium', trust.text)}>{trust.label}</span>
         </div>
-        <p className="text-xs text-muted-foreground mt-3">
-          Registered {new Date(app.registered_at).toLocaleDateString()}
-        </p>
+
+        {/* Permissions */}
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">This app can:</p>
+          <ul className="space-y-1">
+            {permissions.map((p: string) => (
+              <li key={p} className="flex items-start gap-1.5 text-xs text-foreground/70">
+                <span className="mt-0.5 w-3 h-3 rounded-full border border-border bg-muted shrink-0" />
+                {permissionLabels[p] ?? p}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between pt-1 border-t border-border mt-auto">
+          <p className="text-xs text-muted-foreground">
+            Connected {new Date(registeredAt).toLocaleDateString()}
+          </p>
+          <button className="text-xs text-muted-foreground hover:text-destructive transition-colors">
+            Revoke
+          </button>
+        </div>
       </CardContent>
     </Card>
   )

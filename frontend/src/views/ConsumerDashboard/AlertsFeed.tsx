@@ -1,4 +1,3 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { AlertEvent } from '@/api/types'
 
@@ -6,40 +5,71 @@ interface AlertsFeedProps {
   alerts: AlertEvent[]
 }
 
-const severityStyles: Record<AlertEvent['severity'], string> = {
-  info:     'bg-blue-50 border-blue-200 text-blue-800',
-  warning:  'bg-yellow-50 border-yellow-200 text-yellow-800',
-  critical: 'bg-red-50 border-red-200 text-red-800',
+const severityConfig: Record<string, { border: string; dot: string; label: string; bg: string }> = {
+  info:     { border: 'border-l-primary',     dot: 'bg-primary',     label: 'text-primary',     bg: '' },
+  warning:  { border: 'border-l-amber-500',   dot: 'bg-amber-500',   label: 'text-amber-600',   bg: '' },
+  critical: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive',  bg: 'bg-destructive/5' },
+}
+
+function timeAgo(iso: string) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diff < 60) return 'Just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+  return new Date(iso).toLocaleDateString()
 }
 
 export default function AlertsFeed({ alerts }: AlertsFeedProps) {
+  const unseen = alerts.filter((a) => !a.resolved).length
+
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Recent Alerts</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {alerts.length === 0 && (
-          <p className="text-sm text-muted-foreground">No alerts yet.</p>
-        )}
-        {alerts.map((alert) => (
-          <div
-            key={alert.id}
-            className={cn(
-              'rounded-md border px-3 py-2 text-sm',
-              severityStyles[alert.severity],
-            )}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <span className="font-medium capitalize">{alert.severity}</span>
-              <span className="text-xs opacity-70">
-                {new Date(alert.triggered_at).toLocaleTimeString()}
-              </span>
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold text-sm">Security Notifications</p>
+          {unseen > 0 && (
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+              {unseen}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">{alerts.length} total</p>
+      </div>
+
+      {alerts.length === 0 && (
+        <div className="py-10 text-center border border-dashed border-border rounded-xl">
+          <p className="text-sm font-medium text-muted-foreground">All clear</p>
+          <p className="text-xs text-muted-foreground mt-1">No security alerts on your account.</p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {alerts.map((alert) => {
+          const cfg = severityConfig[alert.severity] ?? severityConfig.info
+          return (
+            <div
+              key={alert.id}
+              className={cn(
+                'flex gap-3 border border-border border-l-2 rounded-lg px-4 py-3',
+                cfg.border,
+                cfg.bg,
+                !alert.resolved && 'bg-muted/20',
+              )}
+            >
+              <div className="mt-0.5 shrink-0">
+                <span className={cn('block w-2 h-2 rounded-full mt-1', cfg.dot)} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-foreground/85 leading-snug">{alert.description}</p>
+                <p className="text-xs text-muted-foreground mt-1">{timeAgo(alert.triggered_at)}</p>
+              </div>
+              {!alert.resolved && (
+                <span className="shrink-0 text-xs font-medium text-muted-foreground mt-0.5">New</span>
+              )}
             </div>
-            <p className="mt-0.5 text-xs">{alert.description}</p>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
+          )
+        })}
+      </div>
+    </div>
   )
 }

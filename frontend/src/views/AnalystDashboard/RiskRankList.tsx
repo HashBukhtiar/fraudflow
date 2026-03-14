@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import TrustBadge from '@/views/ConsumerDashboard/TrustBadge'
+import { cn } from '@/lib/utils'
 import type { AppProfile } from '@/api/types'
 
 interface RiskRankListProps {
@@ -7,26 +7,46 @@ interface RiskRankListProps {
 }
 
 export default function RiskRankList({ apps }: RiskRankListProps) {
-  const sorted = [...apps].sort((a, b) => a.trust_score - b.trust_score)
+  const sorted = [...apps].sort((a, b) => (a as any).trust_score - (b as any).trust_score)
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Apps by Risk</CardTitle>
+        <CardTitle className="text-sm font-semibold">Apps by Risk</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        {sorted.map((app) => (
-          <div
-            key={app.id}
-            className="flex items-center justify-between gap-3 py-1.5 border-b border-border last:border-0"
-          >
-            <div>
-              <p className="text-sm font-medium">{app.name}</p>
-              <p className="text-xs text-muted-foreground capitalize">{app.category}</p>
+      <CardContent className="space-y-4">
+        {sorted.map((app) => {
+          const a = app as any
+          const pct = Math.round(a.trust_score * 100)
+          const barColor =
+            a.trust_score >= 0.7 ? 'bg-primary' : a.trust_score >= 0.4 ? 'bg-amber-500' : 'bg-destructive'
+          const textColor =
+            a.trust_score >= 0.7
+              ? 'text-primary'
+              : a.trust_score >= 0.4
+                ? 'text-amber-600'
+                : 'text-destructive'
+
+          return (
+            <div key={a.id} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{a.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{a.category}</p>
+                </div>
+                <span className={cn('text-sm font-semibold tabular-nums font-mono', textColor)}>
+                  {pct}%
+                </span>
+              </div>
+              <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
+                <div
+                  className={cn('h-full rounded-full', barColor)}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             </div>
-            <TrustBadge score={app.trust_score} />
-          </div>
-        ))}
+          )
+        })}
       </CardContent>
     </Card>
   )
