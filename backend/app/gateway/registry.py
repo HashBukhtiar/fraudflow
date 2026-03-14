@@ -11,10 +11,11 @@ Exposes:
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import APICallLog, AppProfile
+from app.models import APICallLog, AppCategory, AppProfile, TrustLevel
 
 router = APIRouter(prefix="/api/apps", tags=["App Registry"])
 
@@ -22,12 +23,19 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 # ---------------------------------------------------------------------------
-# Response schemas (simple Pydantic-style dicts via SQLModel)
+# Request schema for creating an app (plain Pydantic — no SQLModel table issues)
 # ---------------------------------------------------------------------------
 
-class AppProfileCreate(AppProfile, table=False):
-    """Schema for registering a new app — excludes auto-generated fields."""
-    pass
+class AppCreateRequest(BaseModel):
+    """Payload for registering a new third-party app."""
+    app_id: str
+    name: str
+    category: AppCategory = AppCategory.OTHER
+    description: str = ""
+    trust_score: float = 1.0
+    trust_level: TrustLevel = TrustLevel.NEW
+    permissions: str = ""
+    is_active: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +90,7 @@ def get_app_calls(
 
 
 @router.post("", response_model=AppProfile, status_code=201)
-def register_app(app_data: AppProfile, session: SessionDep) -> AppProfile:
+def register_app(app_data: AppCreateRequest, session: SessionDep) -> AppProfile:
     """Register a new third-party app. app_id must be unique."""
     existing = session.exec(
         select(AppProfile).where(AppProfile.app_id == app_data.app_id)
@@ -94,7 +102,8 @@ def register_app(app_data: AppProfile, session: SessionDep) -> AppProfile:
             detail=f"App '{app_data.app_id}' is already registered",
         )
 
-    session.add(app_data)
+    app = AppProfile(**app_data.model_dump())
+    session.add(app)
     session.commit()
-    session.refresh(app_data)
-    return app_data
+    session.refresh(app)
+    return app
