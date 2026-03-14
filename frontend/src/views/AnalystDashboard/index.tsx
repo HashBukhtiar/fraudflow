@@ -35,7 +35,7 @@ const MOCK_APPS: AppProfile[] = [
     trust_score: 0.10,
     status: 'active',
   },
-]
+] as unknown as AppProfile[]
 
 const MOCK_CALLS: APICallLog[] = [
   {
@@ -62,7 +62,7 @@ const MOCK_CALLS: APICallLog[] = [
     data_volume_kb: 8, permission_scope_used: 'read:accounts', allowed: true,
     scenario_tag: null,
   },
-]
+] as unknown as APICallLog[]
 
 const MOCK_DECISIONS: FraudDecision[] = [
   {
@@ -83,12 +83,13 @@ const MOCK_DECISIONS: FraudDecision[] = [
     recommended_action: 'Request explicit user confirmation before processing.',
     timestamp: new Date(Date.now() - 300000).toISOString(), memory_context_used: false,
   },
-]
+] as unknown as FraudDecision[]
 
-const verdictColor: Record<FraudDecision['verdict'], string> = {
-  APPROVE: 'bg-green-100 text-green-800',
-  FLAG: 'bg-yellow-100 text-yellow-800',
-  BLOCK: 'bg-red-100 text-red-800',
+const verdictConfig: Record<string, string> = {
+  APPROVE: 'bg-primary/10 text-primary border-primary/20',
+  ALLOW: 'bg-primary/10 text-primary border-primary/20',
+  FLAG: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
+  BLOCK: 'bg-destructive/10 text-destructive border-destructive/20',
 }
 
 export default function AnalystDashboard() {
@@ -108,42 +109,48 @@ export default function AnalystDashboard() {
       })
   }, [])
 
-  const blocked = decisions.filter((d) => d.verdict === 'BLOCK').length
-  const flagged = decisions.filter((d) => d.verdict === 'FLAG').length
-  const blockedCalls = calls.filter((c) => !c.allowed).length
+  const blocked = (decisions as any[]).filter((d) => d.verdict === 'BLOCK').length
+  const flagged = (decisions as any[]).filter((d) => d.verdict === 'FLAG').length
+  const blockedCalls = (calls as any[]).filter((c) => !(c.allowed ?? !c.flagged)).length
 
   return (
-    <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Analyst Dashboard</h1>
-        <p className="text-muted-foreground text-sm mt-1">
+    <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
+      {/* Header */}
+      <div className="border-b border-border pb-6">
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">
+          Analyst View
+        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">Activity Overview</h1>
+        <p className="text-sm text-muted-foreground mt-1">
           Real-time view of third-party app activity and fraud decisions.
         </p>
       </div>
 
-      {/* Stats row */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: 'Blocked', value: blocked, color: 'text-red-600' },
-          { label: 'Flagged', value: flagged, color: 'text-yellow-600' },
-          { label: 'Blocked Calls', value: blockedCalls, color: 'text-red-600' },
+          { label: 'Blocked', value: blocked, colorClass: 'text-destructive' },
+          { label: 'Flagged', value: flagged, colorClass: 'text-amber-600' },
+          { label: 'Blocked Calls', value: blockedCalls, colorClass: 'text-destructive' },
         ].map((stat) => (
           <Card key={stat.label}>
-            <CardContent className="pt-4 pb-3">
-              <p className={cn('text-2xl font-bold', stat.color)}>{stat.value}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{stat.label}</p>
+            <CardContent className="pt-5 pb-4">
+              <p className={cn('text-3xl font-bold tabular-nums', stat.colorClass)}>
+                {stat.value}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1 uppercase tracking-wider">
+                {stat.label}
+              </p>
             </CardContent>
           </Card>
         ))}
       </div>
 
+      {/* Feed + Risk */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: call feed */}
         <div className="lg:col-span-2">
           <CallFeed calls={calls} apps={apps} />
         </div>
-
-        {/* Right: risk rank */}
         <div>
           <RiskRankList apps={apps} />
         </div>
@@ -152,41 +159,50 @@ export default function AnalystDashboard() {
       {/* Decisions table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Recent Decisions</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-sm font-semibold">Recent Decisions</CardTitle>
+            <span className="text-xs text-muted-foreground">{decisions.length} total</span>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <table className="w-full text-sm">
             <thead className="border-b border-border">
-              <tr className="text-xs text-muted-foreground">
-                <th className="text-left px-4 py-2 font-medium">App</th>
-                <th className="text-left px-4 py-2 font-medium">Verdict</th>
-                <th className="text-left px-4 py-2 font-medium">Confidence</th>
-                <th className="text-left px-4 py-2 font-medium">Time</th>
-                <th className="text-left px-4 py-2 font-medium" />
+              <tr className="text-xs text-muted-foreground uppercase tracking-wider">
+                <th className="text-left px-4 py-2.5 font-medium">App</th>
+                <th className="text-left px-4 py-2.5 font-medium">Verdict</th>
+                <th className="text-left px-4 py-2.5 font-medium">Confidence</th>
+                <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">Time</th>
+                <th className="text-left px-4 py-2.5 font-medium" />
               </tr>
             </thead>
             <tbody>
-              {decisions.map((d) => {
-                const app = apps.find((a) => a.id === d.app_id)
+              {decisions.map((decision) => {
+                const d = decision as any
+                const app = apps.find((a) => (a as any).id === d.app_id) as any
                 return (
                   <tr
                     key={d.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/40 cursor-pointer"
-                    onClick={() => setSelected(d)}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
+                    onClick={() => setSelected(decision)}
                   >
-                    <td className="px-4 py-2 font-medium">{app?.name ?? d.app_id}</td>
-                    <td className="px-4 py-2">
-                      <span className={cn('px-1.5 py-0.5 rounded text-xs font-bold', verdictColor[d.verdict])}>
+                    <td className="px-4 py-3 font-medium">{app?.name ?? d.app_id}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={cn(
+                          'px-2 py-0.5 rounded-full border text-xs font-bold tracking-wide',
+                          verdictConfig[d.verdict] ?? verdictConfig.BLOCK,
+                        )}
+                      >
                         {d.verdict}
                       </span>
                     </td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                       {Math.round(d.confidence * 100)}%
                     </td>
-                    <td className="px-4 py-2 text-xs text-muted-foreground whitespace-nowrap">
-                      {new Date(d.timestamp).toLocaleTimeString()}
+                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono hidden sm:table-cell">
+                      {new Date(d.timestamp ?? d.decided_at).toLocaleTimeString()}
                     </td>
-                    <td className="px-4 py-2 text-xs text-primary">Details →</td>
+                    <td className="px-4 py-3 text-xs text-primary">Details →</td>
                   </tr>
                 )
               })}
