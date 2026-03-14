@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { triggerScenario } from '@/api/client'
+import type { FraudDecision } from '@/api/types'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -14,38 +15,34 @@ interface Scenario {
 
 const SCENARIOS: Scenario[] = [
   {
-    id: 'rogue_app',
+    id: 'rogue_budgeting_app',
     name: 'Scenario 1 — Rogue Budgeting App',
     description:
-      'BudgetBuddy starts making API calls at 3am, hitting payment endpoints outside its declared budgeting scope.',
-    app: 'BudgetBuddy',
+      'BudgetWise starts making API calls at 3am, hitting payment endpoints outside its declared budgeting scope.',
+    app: 'BudgetWise',
     expectedVerdict: 'BLOCK',
   },
   {
-    id: 'transaction_anomaly',
+    id: 'payment_anomaly',
     name: 'Scenario 2 — Payment Anomaly',
     description:
-      'QuickPay initiates a high-value payment for a user with no prior payment history through this app.',
-    app: 'QuickPay',
+      'PaySwift fires 8 payments just under $10,000 within 3 minutes — a classic structuring pattern.',
+    app: 'PaySwift',
     expectedVerdict: 'FLAG',
   },
   {
     id: 'social_engineering',
     name: 'Scenario 3 — Social Engineering Tax App',
     description:
-      'TaxEasy, registered 48 hours ago, requests excessive permissions and shows Benford deviation patterns consistent with data harvesting.',
-    app: 'TaxEasy',
+      'TaxEase, registered 48 hours ago, requests excessive permissions and shows Benford deviation patterns consistent with data harvesting.',
+    app: 'TaxEase',
     expectedVerdict: 'BLOCK',
   },
 ]
 
 type RunState = 'idle' | 'running' | 'done' | 'error'
 
-interface ScenarioResult {
-  verdict?: string
-  explanation?: string
-  raw?: unknown
-}
+type ScenarioResult = Pick<FraudDecision, 'verdict' | 'explanation' | 'confidence' | 'recommended_action'>
 
 export default function DemoScenarios() {
   const [states, setStates] = useState<Record<string, RunState>>({})
@@ -134,11 +131,20 @@ export default function DemoScenarios() {
                         >
                           {result.verdict}
                         </span>
-                        <span className="text-xs text-muted-foreground">verdict returned</span>
+                        {result.confidence !== undefined && (
+                          <span className="text-xs text-muted-foreground">
+                            {Math.round(result.confidence * 100)}% confidence
+                          </span>
+                        )}
                       </div>
                     )}
                     {result.explanation && (
                       <p className="text-xs">{result.explanation}</p>
+                    )}
+                    {result.recommended_action && (
+                      <p className="text-xs text-muted-foreground">
+                        Action: <span className="font-medium text-foreground">{result.recommended_action}</span>
+                      </p>
                     )}
                     {!result.verdict && (
                       <p className="text-xs text-muted-foreground">Scenario triggered successfully.</p>

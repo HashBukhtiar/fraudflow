@@ -153,7 +153,7 @@ def require_scope(required_scope: str) -> Callable:
                 permission_scope_used=required_scope,
                 ip_address=ip,
             )
-            background_tasks.add_task(run_fraud_pipeline, app.app_id, session)
+            background_tasks.add_task(run_fraud_pipeline, app.app_id)
             raise HTTPException(
                 status_code=403,
                 detail=(
@@ -174,7 +174,7 @@ def require_scope(required_scope: str) -> Callable:
             permission_scope_used=required_scope,
             ip_address=ip,
         )
-        background_tasks.add_task(run_fraud_pipeline, app.app_id, session)
+        background_tasks.add_task(run_fraud_pipeline, app.app_id)
 
         return app
 

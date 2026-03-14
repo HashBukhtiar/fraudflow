@@ -133,8 +133,9 @@ def _composite_risk_score(
 
     new_app = 1.0 if app_age_hours < _NEW_APP_AGE_HOURS else 0.0
 
-    # trust_score is 0–1 in seed data; invert so high trust = low risk
-    low_trust = 1.0 - min(max(trust_score, 0.0), 1.0)
+    # trust_score is 0–10 (per AppProfile field constraint le=10.0); normalise
+    # to 0–1 before inverting so high trust → low risk contribution
+    low_trust = 1.0 - min(max(trust_score / 10.0, 0.0), 1.0)
 
     weights = {
         "unusual_endpoint": 2.5,
