@@ -6,17 +6,19 @@ interface TrustBadgeProps {
 }
 
 export default function TrustBadge({ score, className }: TrustBadgeProps) {
-  const pct = Math.round(score * 100)
+  // Backend stores trust_score on a 0–10 scale; normalise to 0–1 for display
+  const normalised = score / 10
+  const pct = Math.round(normalised * 100)
 
   const color =
-    score >= 0.7
+    normalised >= 0.7
       ? 'bg-primary/10 text-primary border-primary/20'
-      : score >= 0.4
+      : normalised >= 0.4
         ? 'bg-amber-500/10 text-amber-600 border-amber-500/20'
         : 'bg-destructive/10 text-destructive border-destructive/20'
 
   const dotColor =
-    score >= 0.7 ? 'bg-primary' : score >= 0.4 ? 'bg-amber-500' : 'bg-destructive'
+    normalised >= 0.7 ? 'bg-primary' : normalised >= 0.4 ? 'bg-amber-500' : 'bg-destructive'
 
   return (
     <span

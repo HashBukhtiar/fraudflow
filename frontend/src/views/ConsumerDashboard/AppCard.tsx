@@ -2,34 +2,23 @@ import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { AppProfile } from '@/api/types'
 
-interface AppCardProps {
-  app: AppProfile
-}
-
 const permissionLabels: Record<string, string> = {
-  'read:accounts': 'View your accounts',
-  'read:transactions': 'View transaction history',
-  'write:payments': 'Make payments',
-  'read:balances': 'View account balances',
-  'write:consent': 'Manage consent settings',
-}
-
-const statusConfig: Record<string, { label: string; className: string }> = {
-  active: { label: 'Active', className: 'bg-primary/10 text-primary border-primary/20' },
-  flagged: { label: 'Needs attention', className: 'bg-amber-500/10 text-amber-600 border-amber-500/20' },
-  suspended: { label: 'Suspended', className: 'bg-destructive/10 text-destructive border-destructive/20' },
+  'read:accounts':      'View your accounts',
+  'read:transactions':  'View transaction history',
+  'write:payments':     'Make payments',
+  'read:balances':      'View account balances',
+  'write:consent':      'Manage consent settings',
 }
 
 const categoryLabel: Record<string, string> = {
-  budgeting: 'Budgeting',
-  payments: 'Payments',
-  tax: 'Tax & Filing',
-  lending: 'Lending',
-  investing: 'Investing',
-  other: 'Other',
+  budgeting:  'Budgeting',
+  payments:   'Payments',
+  tax:        'Tax & Filing',
+  lending:    'Lending',
+  investing:  'Investing',
+  other:      'Other',
 }
 
-// Stable color per app name
 const avatarPalette = [
   'bg-blue-100 text-blue-700',
   'bg-violet-100 text-violet-700',
@@ -44,18 +33,28 @@ function avatarColor(name: string) {
   return avatarPalette[h % avatarPalette.length]
 }
 
-function trustLabel(score: number) {
-  if (score >= 0.7) return { label: 'Trusted', dot: 'bg-primary', text: 'text-primary' }
-  if (score >= 0.4) return { label: 'Use with caution', dot: 'bg-amber-500', text: 'text-amber-600' }
-  return { label: 'High risk', dot: 'bg-destructive', text: 'text-destructive' }
+function trustLabel(norm: number) {
+  if (norm >= 0.7) return { label: 'Trusted',           dot: 'bg-primary',     text: 'text-primary' }
+  if (norm >= 0.4) return { label: 'Use with caution',  dot: 'bg-amber-500',   text: 'text-amber-600' }
+  return                        { label: 'High risk',          dot: 'bg-destructive', text: 'text-destructive' }
 }
 
-export default function AppCard({ app }: AppCardProps) {
-  const a = app as any
-  const status = statusConfig[a.status] ?? statusConfig.active
-  const trust = trustLabel(a.trust_score)
-  const initials = a.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
-  const permissions: string[] = a.permissions_requested ?? (a.permissions ? a.permissions.split(',').map((s: string) => s.trim()) : [])
+export default function AppCard({ app }: { app: AppProfile }) {
+  const norm = app.trust_score / 10
+  const trust = trustLabel(norm)
+  const initials = app.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
+
+  // permissions is a comma-separated string from the backend
+  const permissions: string[] = (app.permissions ?? '')
+    .split(',').map((s: string) => s.trim()).filter(Boolean)
+
+  const isActive = app.is_active
+  const statusLabel = isActive ? 'Active' : 'Suspended'
+  const statusClass = isActive
+    ? 'bg-primary/10 text-primary border-primary/20'
+    : 'bg-destructive/10 text-destructive border-destructive/20'
+
+  const registeredAt = app.registered_at
 
   return (
     <Card className="flex flex-col">
@@ -65,24 +64,26 @@ export default function AppCard({ app }: AppCardProps) {
           <div
             className={cn(
               'w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0',
-              avatarColor(a.name),
+              avatarColor(app.name),
             )}
           >
             {initials}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-start justify-between gap-2">
-              <p className="font-semibold text-sm leading-tight">{a.name}</p>
+              <p className="font-semibold text-sm leading-tight">{app.name}</p>
               <span
                 className={cn(
                   'shrink-0 inline-flex items-center px-2 py-0.5 rounded-full border text-xs font-medium',
-                  status.className,
+                  statusClass,
                 )}
               >
-                {status.label}
+                {statusLabel}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{categoryLabel[a.category] ?? a.category}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {categoryLabel[app.category] ?? app.category}
+            </p>
           </div>
         </div>
 
@@ -108,7 +109,7 @@ export default function AppCard({ app }: AppCardProps) {
         {/* Footer */}
         <div className="flex items-center justify-between pt-1 border-t border-border mt-auto">
           <p className="text-xs text-muted-foreground">
-            Connected {new Date(a.registration_date ?? a.registered_at).toLocaleDateString()}
+            Connected {new Date(registeredAt).toLocaleDateString()}
           </p>
           <button className="text-xs text-muted-foreground hover:text-destructive transition-colors">
             Revoke

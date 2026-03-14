@@ -1,5 +1,9 @@
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+load_dotenv()                          # .env
+load_dotenv(".env.local", override=True)  # .env.local wins if both exist
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

@@ -6,12 +6,9 @@ interface AlertsFeedProps {
 }
 
 const severityConfig: Record<string, { border: string; dot: string; label: string; bg: string }> = {
-  low:      { border: 'border-l-primary',     dot: 'bg-primary',     label: 'text-primary',    bg: '' },
-  medium:   { border: 'border-l-amber-500',   dot: 'bg-amber-500',   label: 'text-amber-600',  bg: '' },
-  high:     { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive', bg: 'bg-destructive/5' },
-  info:     { border: 'border-l-primary',     dot: 'bg-primary',     label: 'text-primary',    bg: '' },
-  warning:  { border: 'border-l-amber-500',   dot: 'bg-amber-500',   label: 'text-amber-600',  bg: '' },
-  critical: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive', bg: 'bg-destructive/5' },
+  info:     { border: 'border-l-primary',     dot: 'bg-primary',     label: 'text-primary',     bg: '' },
+  warning:  { border: 'border-l-amber-500',   dot: 'bg-amber-500',   label: 'text-amber-600',   bg: '' },
+  critical: { border: 'border-l-destructive', dot: 'bg-destructive', label: 'text-destructive',  bg: 'bg-destructive/5' },
 }
 
 function timeAgo(iso: string) {
@@ -23,7 +20,7 @@ function timeAgo(iso: string) {
 }
 
 export default function AlertsFeed({ alerts }: AlertsFeedProps) {
-  const unseen = (alerts as any[]).filter((a) => !a.seen).length
+  const unseen = alerts.filter((a) => !a.resolved).length
 
   return (
     <div>
@@ -47,10 +44,8 @@ export default function AlertsFeed({ alerts }: AlertsFeedProps) {
       )}
 
       <div className="space-y-2">
-        {(alerts as any[]).map((alert) => {
+        {alerts.map((alert) => {
           const cfg = severityConfig[alert.severity] ?? severityConfig.info
-          const ts = alert.timestamp ?? alert.triggered_at
-          const msg = alert.message ?? alert.description
           return (
             <div
               key={alert.id}
@@ -58,17 +53,17 @@ export default function AlertsFeed({ alerts }: AlertsFeedProps) {
                 'flex gap-3 border border-border border-l-2 rounded-lg px-4 py-3',
                 cfg.border,
                 cfg.bg,
-                !alert.seen && 'bg-muted/20',
+                !alert.resolved && 'bg-muted/20',
               )}
             >
               <div className="mt-0.5 shrink-0">
                 <span className={cn('block w-2 h-2 rounded-full mt-1', cfg.dot)} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground/85 leading-snug">{msg}</p>
-                <p className="text-xs text-muted-foreground mt-1">{timeAgo(ts)}</p>
+                <p className="text-sm text-foreground/85 leading-snug">{alert.description}</p>
+                <p className="text-xs text-muted-foreground mt-1">{timeAgo(alert.triggered_at)}</p>
               </div>
-              {!alert.seen && (
+              {!alert.resolved && (
                 <span className="shrink-0 text-xs font-medium text-muted-foreground mt-0.5">New</span>
               )}
             </div>

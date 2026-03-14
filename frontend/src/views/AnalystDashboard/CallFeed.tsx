@@ -16,13 +16,14 @@ function timeAgo(iso: string) {
 }
 
 const scenarioLabels: Record<string, string> = {
-  rogue_app: 'Rogue app',
-  transaction_anomaly: 'Anomaly',
-  social_engineering: 'Social eng.',
+  rogue_budgeting_app:   'Rogue app',
+  payment_anomaly:       'Anomaly',
+  social_engineering:    'Social eng.',
 }
 
 export default function CallFeed({ calls, apps }: CallFeedProps) {
-  const appMap = Object.fromEntries(apps.map((a) => [(a as any).id, a]))
+  // Key by app_id (string) — the FK used in APICallLog
+  const appMap = Object.fromEntries(apps.map((a) => [a.app_id, a]))
 
   return (
     <Card className="flex flex-col">
@@ -52,32 +53,31 @@ export default function CallFeed({ calls, apps }: CallFeedProps) {
             </thead>
             <tbody>
               {calls.map((call) => {
-                const c = call as any
-                const app = appMap[c.app_id] as any
-                const allowed = c.allowed ?? !c.flagged
+                const app = appMap[call.app_id]
+                const allowed = !call.flagged
                 return (
                   <tr
-                    key={c.id}
+                    key={call.id}
                     className={cn(
                       'border-b border-border last:border-0',
-                      !allowed && 'bg-destructive/5',
+                      call.flagged && 'bg-destructive/5',
                     )}
                   >
                     <td className="px-4 py-3">
-                      <p className="font-medium text-sm leading-tight">{app?.name ?? c.app_id}</p>
-                      {c.scenario_tag && (
+                      <p className="font-medium text-sm leading-tight">{app?.name ?? call.app_id}</p>
+                      {call.scenario_tag && (
                         <span className="text-xs text-amber-600 font-medium">
-                          {scenarioLabels[c.scenario_tag] ?? c.scenario_tag}
+                          {scenarioLabels[call.scenario_tag] ?? call.scenario_tag}
                         </span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <span className="font-mono text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-                        {c.endpoint}
+                        {call.endpoint}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground hidden md:table-cell">
-                      {timeAgo(c.timestamp ?? c.triggered_at)}
+                      {timeAgo(call.timestamp)}
                     </td>
                     <td className="px-4 py-3">
                       <span

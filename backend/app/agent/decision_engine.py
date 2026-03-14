@@ -20,7 +20,6 @@ import os
 from datetime import datetime, timezone
 
 import anthropic
-from dotenv import load_dotenv
 from sqlmodel import Session
 
 from ..models import (
@@ -31,8 +30,6 @@ from ..models import (
     RiskSignals,
     Verdict,
 )
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +43,13 @@ _MAX_TOKENS = 512
 _SYSTEM_PROMPT = (
     "You are a bank fraud analyst reviewing third-party fintech app behavior in "
     "Canada's Open Banking ecosystem. Be concise and precise. "
-    "Respond only in JSON with no preamble or markdown."
+    "Respond only in JSON with no preamble or markdown.\n\n"
+    "Verdict decision rules (apply in order — first match wins):\n"
+    "  1. If the user prompt contains a MANDATORY VERDICT line, you MUST use that verdict exactly.\n"
+    "  2. BLOCK  — composite_risk_score >= 6.0\n"
+    "  3. FLAG   — composite_risk_score 3.5–5.9\n"
+    "  4. APPROVE — composite_risk_score < 3.5\n"
+    "The MANDATORY VERDICT directive overrides your own judgment. You must comply."
 )
 
 # Fallback values used when the API call or JSON parse fails
@@ -109,11 +112,43 @@ def _signals_summary(signals: RiskSignals) -> str:
     return "\n".join(lines)
 
 
+def _mandatory_verdict(app: AppProfile, signals: RiskSignals) -> str | None:
+    """Return a BLOCK/FLAG override directive string if critical conditions are met,
+    or None if the score-based rules should decide.
+
+    These are hard rules that Claude must not override with its own reasoning.
+    """
+    # Critical BLOCK conditions — any one is sufficient
+    is_new_app = signals.app_age_hours < 72
+
+    # New app requesting payment scope outside a payments category
+    if is_new_app and signals.unusual_endpoint_ratio > 0 and signals.excessive_permissions:
+        return (
+            "MANDATORY VERDICT: BLOCK\n"
+            "Reason: New app (< 72 hours old) with excessive permissions is hitting payment "
+            "endpoints outside its declared category scope. This combination is a critical "
+            "fraud indicator — revoke access immediately."
+        )
+
+    # Any non-payment category app with 100% payment endpoint calls overnight
+    if signals.unusual_endpoint_ratio >= 1.0 and signals.off_hours_ratio >= 1.0:
+        return (
+            "MANDATORY VERDICT: BLOCK\n"
+            "Reason: 100% of calls are to payment endpoints (category mismatch) AND 100% "
+            "are overnight. This is an unambiguous token abuse or exfiltration pattern."
+        )
+
+    return None
+
+
 def _build_user_prompt(
     app: AppProfile,
     signals: RiskSignals,
     memory_context: str,
 ) -> str:
+    override = _mandatory_verdict(app, signals)
+    override_block = f"\n{override}\n" if override else ""
+
     return f"""App under review:
   Name          : {app.name}
   Category      : {app.category.value}
@@ -126,7 +161,7 @@ Risk signals:
 
 Memory context (similar past incidents):
   {memory_context}
-
+{override_block}
 Return a JSON object with exactly these keys:
 {{
   "verdict": "APPROVE" | "FLAG" | "BLOCK",
@@ -219,10 +254,18 @@ def make_decision(
     db.commit()
     db.refresh(signals)
 
-    # 2. Build prompt
+    # 2. Check for mandatory verdict override (Python-level — not subject to LLM drift)
+    forced_verdict: Verdict | None = None
+    forced_action: str | None = None
+    override_directive = _mandatory_verdict(app, signals)
+    if override_directive is not None:
+        forced_verdict = Verdict.BLOCK
+        forced_action  = "revoke_token"
+
+    # 3. Build prompt (includes the override directive text if applicable)
     user_prompt = _build_user_prompt(app, signals, memory_context)
 
-    # 3 + 4. Call Claude and parse response
+    # 4 + 5. Call Claude and parse response
     verdict     = _FALLBACK_VERDICT
     confidence  = _FALLBACK_CONFIDENCE
     explanation = _FALLBACK_EXPLANATION
@@ -249,6 +292,15 @@ def make_decision(
     except Exception as exc:
         # Catches auth errors (missing API key), network issues, etc.
         logger.error("Decision engine error (%s): %s", type(exc).__name__, exc)
+
+    # 6. Apply Python-level override — locks verdict/action regardless of Claude output
+    if forced_verdict is not None:
+        verdict = forced_verdict
+        action  = forced_action  # type: ignore[assignment]
+        logger.info(
+            "pipeline [%s]: mandatory override applied → %s / %s",
+            app.app_id, verdict.value, action,
+        )
 
     # 5 + 6. Build and save FraudDecision linked to the saved RiskSignals
     decision = FraudDecision(

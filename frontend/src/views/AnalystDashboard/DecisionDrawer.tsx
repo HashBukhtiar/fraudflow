@@ -17,19 +17,18 @@ interface DecisionDrawerProps {
 
 const verdictConfig: Record<string, string> = {
   APPROVE: 'bg-primary/10 text-primary border-primary/20',
-  ALLOW: 'bg-primary/10 text-primary border-primary/20',
-  FLAG: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  BLOCK: 'bg-destructive/10 text-destructive border-destructive/20',
+  ALLOW:   'bg-primary/10 text-primary border-primary/20',
+  FLAG:    'bg-amber-500/10 text-amber-600 border-amber-500/20',
+  BLOCK:   'bg-destructive/10 text-destructive border-destructive/20',
 }
 
 export default function DecisionDrawer({ decision, apps, open, onClose }: DecisionDrawerProps) {
-  const d = decision as any
-  const app = apps.find((a) => (a as any).id === d?.app_id) as any
+  const app = apps.find((a) => a.app_id === decision?.app_id)
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-md">
-        {d && (
+        {decision && (
           <>
             <SheetHeader className="mb-6">
               <SheetTitle className="text-base">Decision Detail</SheetTitle>
@@ -40,15 +39,15 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
                 <span
                   className={cn(
                     'px-2.5 py-1 rounded-full border text-xs font-bold tracking-wider',
-                    verdictConfig[d.verdict] ?? verdictConfig.BLOCK,
+                    verdictConfig[decision.verdict] ?? verdictConfig.BLOCK,
                   )}
                 >
-                  {d.verdict}
+                  {decision.verdict}
                 </span>
                 <span className="text-muted-foreground text-xs font-mono">
-                  {Math.round(d.confidence * 100)}% confidence
+                  {Math.round(decision.confidence * 100)}% confidence
                 </span>
-                {d.memory_context_used && (
+                {(decision as any).memory_context_used && (
                   <Badge variant="secondary" className="text-xs">memory hit</Badge>
                 )}
               </div>
@@ -69,7 +68,7 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                   Explanation
                 </p>
-                <p className="text-sm leading-relaxed text-foreground/80">{d.explanation}</p>
+                <p className="text-sm leading-relaxed text-foreground/80">{decision.explanation}</p>
               </div>
 
               {/* Recommended action */}
@@ -77,7 +76,7 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
                 <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                   Recommended Action
                 </p>
-                <p className="text-sm">{d.recommended_action}</p>
+                <p className="text-sm">{decision.recommended_action}</p>
               </div>
 
               {/* Timestamp */}
@@ -86,7 +85,7 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
                   Timestamp
                 </p>
                 <p className="text-sm font-mono">
-                  {new Date(d.timestamp ?? d.decided_at).toLocaleString()}
+                  {new Date(decision.decided_at).toLocaleString()}
                 </p>
               </div>
             </div>
