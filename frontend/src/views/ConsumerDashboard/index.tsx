@@ -6,61 +6,76 @@ import AlertsFeed from './AlertsFeed'
 
 const MOCK_APPS: AppProfile[] = [
   {
-    id: '1',
+    id: 1,
+    app_id: 'budgetbuddy',
     name: 'BudgetBuddy',
     category: 'budgeting',
-    permissions_requested: ['read:accounts', 'read:transactions'],
-    registration_date: '2024-06-15',
-    trust_score: 0.85,
-    status: 'active',
+    description: 'Personal budget tracking app',
+    registered_at: '2024-06-15T00:00:00Z',
+    trust_score: 8.5,
+    trust_level: 'HIGH',
+    permissions: 'read:accounts,read:transactions',
+    is_active: true,
   },
   {
-    id: '2',
+    id: 2,
+    app_id: 'quickpay',
     name: 'QuickPay',
     category: 'payments',
-    permissions_requested: ['read:accounts', 'write:payments', 'read:transactions'],
-    registration_date: '2024-11-02',
-    trust_score: 0.40,
-    status: 'flagged',
+    description: 'Fast payment processing',
+    registered_at: '2024-11-02T00:00:00Z',
+    trust_score: 4.0,
+    trust_level: 'MEDIUM',
+    permissions: 'read:accounts,write:payments,read:transactions',
+    is_active: true,
   },
   {
-    id: '3',
+    id: 3,
+    app_id: 'taxeasy',
     name: 'TaxEasy',
     category: 'tax',
-    permissions_requested: ['read:accounts', 'read:transactions', 'read:balances', 'write:consent'],
-    registration_date: '2026-03-12',
-    trust_score: 0.10,
-    status: 'active',
+    description: 'Tax filing assistant',
+    registered_at: '2026-03-12T00:00:00Z',
+    trust_score: 1.0,
+    trust_level: 'NEW',
+    permissions: 'read:accounts,read:transactions,read:balances,write:consent',
+    is_active: true,
   },
 ]
 
 const MOCK_ALERTS: AlertEvent[] = [
   {
-    id: 'a1',
-    app_id: '1',
-    decision_id: 'd1',
-    severity: 'high',
-    message: 'BudgetBuddy attempted to initiate a payment outside its declared scope at 3:12am.',
-    timestamp: new Date().toISOString(),
-    seen: false,
+    id: 1,
+    app_id: 'budgetbuddy',
+    fraud_decision_id: 1,
+    triggered_at: new Date().toISOString(),
+    title: 'BLOCK: BudgetBuddy (budgeting)',
+    description: 'BudgetBuddy attempted to initiate a payment outside its declared scope at 3:12am.',
+    severity: 'critical',
+    verdict: 'BLOCK',
+    resolved: false,
   },
   {
-    id: 'a2',
-    app_id: '3',
-    decision_id: 'd2',
-    severity: 'high',
-    message: 'TaxEasy (registered 2 days ago) requested excessive permissions. Request blocked.',
-    timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-    seen: false,
+    id: 2,
+    app_id: 'taxeasy',
+    fraud_decision_id: 2,
+    triggered_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+    title: 'BLOCK: TaxEasy (tax)',
+    description: 'TaxEasy (registered 2 days ago) requested excessive permissions. Request blocked.',
+    severity: 'critical',
+    verdict: 'BLOCK',
+    resolved: false,
   },
   {
-    id: 'a3',
-    app_id: '2',
-    decision_id: 'd3',
-    severity: 'medium',
-    message: 'QuickPay made 47 API calls in the last 5 minutes — abnormal frequency detected.',
-    timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    seen: true,
+    id: 3,
+    app_id: 'quickpay',
+    fraud_decision_id: 3,
+    triggered_at: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+    title: 'FLAG: QuickPay (payments)',
+    description: 'QuickPay made 47 API calls in the last 5 minutes — abnormal frequency detected.',
+    severity: 'warning',
+    verdict: 'FLAG',
+    resolved: true,
   },
 ]
 
@@ -82,7 +97,7 @@ export default function ConsumerDashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  const unseenCount = alerts.filter((a) => !a.seen).length
+  const unseenCount = alerts.filter((a) => !a.resolved).length
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
@@ -104,7 +119,7 @@ export default function ConsumerDashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {apps.map((app) => (
-          <AppCard key={app.id} app={app} />
+          <AppCard key={app.app_id} app={app} />
         ))}
       </div>
 
