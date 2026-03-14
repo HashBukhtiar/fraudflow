@@ -27,9 +27,14 @@ _BENFORD_EXPECTED: dict[int, float] = {
     d: math.log10(1 + 1 / d) for d in range(1, 10)
 }
 
-_HIGH_FREQ_THRESHOLD = 10   # calls per 5-minute window
+_HIGH_FREQ_THRESHOLD = 3    # calls per 5-minute window before high-frequency flag
 _NEW_APP_AGE_HOURS    = 72  # less than this → new_app_risk
 _MAX_PERMISSIONS      = 3   # more than this → excessive_permissions
+
+# Payment structuring: amounts clustered just below round thresholds (e.g. $10k)
+_STRUCTURING_BAND_LOW  = 8_000.0   # lower bound of suspicious band
+_STRUCTURING_BAND_HIGH = 9_999.0   # upper bound (just under $10k reporting limit)
+_STRUCTURING_MIN_COUNT = 3         # minimum payments in band to flag
 
 
 # ---------------------------------------------------------------------------
@@ -64,23 +69,57 @@ def _benford_analysis(amounts: list[float]) -> tuple[float, float]:
     return round(benford_score, 4), round(deviation, 4)
 
 
+def _payment_structuring_score(amounts: list[float]) -> float:
+    """Detect payment-structuring pattern: multiple amounts clustered just below
+    a round reporting threshold (e.g. $8,000–$9,999 mimicking sub-$10k structuring).
+
+    Returns a normalised 0–1 score:
+      0.0  — fewer than _STRUCTURING_MIN_COUNT payments in the suspicious band
+      0.5  — minimum threshold met
+      1.0  — all payments fall in the suspicious band
+    """
+    if not amounts:
+        return 0.0
+
+    in_band = [a for a in amounts if _STRUCTURING_BAND_LOW <= a <= _STRUCTURING_BAND_HIGH]
+    if len(in_band) < _STRUCTURING_MIN_COUNT:
+        return 0.0
+
+    # Score scales with the fraction of payments in the band
+    fraction = len(in_band) / len(amounts)
+    # Clamp: minimum 0.5 once threshold is met, maximum 1.0
+    return round(min(0.5 + 0.5 * fraction, 1.0), 4)
+
+
 def _call_rate_per_minute(calls: list[APICallLog], window_minutes: int = 5) -> float:
-    """Count calls in the last `window_minutes` and return calls-per-minute."""
+    """Return the peak call rate (calls per minute) observed within the calls.
+
+    Rather than anchoring to wall-clock *now* (which makes historical/seeded
+    calls invisible), we find the densest `window_minutes`-wide slice within
+    the calls themselves.  This correctly detects bursts in both live and
+    replayed/demo traffic.
+    """
     if not calls:
         return 0.0
 
-    now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(minutes=window_minutes)
+    # Normalise timestamps to UTC-aware
+    def _utc(ts: datetime) -> datetime:
+        return ts if ts.tzinfo is not None else ts.replace(tzinfo=timezone.utc)
 
-    recent = []
-    for c in calls:
-        ts = c.timestamp
-        if ts.tzinfo is None:
-            ts = ts.replace(tzinfo=timezone.utc)
-        if ts >= cutoff:
-            recent.append(c)
+    timestamps = sorted(_utc(c.timestamp) for c in calls)
 
-    return round(len(recent) / window_minutes, 2)
+    if len(timestamps) == 1:
+        return round(1 / window_minutes, 2)
+
+    window = timedelta(minutes=window_minutes)
+    max_count = 0
+    j = 0
+    for i, t_start in enumerate(timestamps):
+        while j < len(timestamps) and timestamps[j] - t_start <= window:
+            j += 1
+        max_count = max(max_count, j - i)
+
+    return round(max_count / window_minutes, 2)
 
 
 def _off_hours_ratio(calls: list[APICallLog]) -> float:
@@ -138,13 +177,13 @@ def _composite_risk_score(
     low_trust = 1.0 - min(max(trust_score / 10.0, 0.0), 1.0)
 
     weights = {
-        "unusual_endpoint": 2.5,
-        "off_hours":        1.5,
-        "high_frequency":   2.0,
-        "benford":          1.0,
-        "new_app":          1.0,
-        "excessive_perms":  1.0,
-        "low_trust":        1.0,
+        "unusual_endpoint": 6.0,   # hardest signal: non-payment app calling payments
+        "off_hours":        4.0,   # sustained overnight access is strongly suspicious
+        "high_frequency":   2.0,   # burst rate (threshold = 3 calls/min)
+        "benford":          2.0,   # numeric anomaly / structuring pattern
+        "new_app":          2.0,
+        "excessive_perms":  1.5,
+        "low_trust":        2.0,
     }
 
     raw = (
@@ -177,6 +216,11 @@ def generate_risk_signals(
     amounts = [c.amount for c in recent_calls if c.amount is not None]
 
     benford_score, benford_deviation = _benford_analysis(amounts)
+    # Combine Benford anomaly with structuring pattern — both measure numeric
+    # financial irregularity.  Take the maximum so either signal can elevate risk.
+    structuring_score = _payment_structuring_score(amounts)
+    effective_benford = max(benford_score, structuring_score)
+
     rate        = _call_rate_per_minute(recent_calls)
     off_hours   = _off_hours_ratio(recent_calls)
     unusual     = _unusual_endpoint_ratio(app, recent_calls)
@@ -185,7 +229,7 @@ def generate_risk_signals(
     excessive   = perm_count > _MAX_PERMISSIONS
 
     composite = _composite_risk_score(
-        benford_score=benford_score,
+        benford_score=effective_benford,
         call_rate_per_minute=rate,
         off_hours_ratio=off_hours,
         unusual_endpoint_ratio=unusual,
@@ -196,7 +240,7 @@ def generate_risk_signals(
 
     return RiskSignals(
         app_id=app.app_id,
-        benford_score=benford_score,
+        benford_score=effective_benford,
         benford_deviation=benford_deviation,
         call_rate_per_minute=rate,
         off_hours_ratio=off_hours,
@@ -213,19 +257,26 @@ def generate_risk_signals(
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    from datetime import timezone
+    """
+    Smoke-test using call patterns that mirror scenarios.py exactly.
 
+    Expected outcomes (matched to Claude system-prompt verdict thresholds):
+      BudgetBuddy → composite >= 6.0  → BLOCK
+      QuickPay    → composite 3.5–5.9 → FLAG
+      TaxEasy     → composite >= 5.0 + new_app + mismatch → BLOCK
+    """
     now = datetime.now(timezone.utc)
+    today_2am = now.replace(hour=2, minute=0, second=0, microsecond=0)
 
-    # --- Seed apps (values match CLAUDE.md) ---------------------------------
+    # --- Seed apps (matching seed.py values) --------------------------------
 
     budget_buddy = AppProfile(
         app_id="budgetbuddy",
         name="BudgetBuddy",
         category=AppCategory.BUDGETING,
-        permissions="read:accounts,read:transactions",          # 2 scopes — normal
+        permissions="accounts:read,transactions:read,balances:read",  # 3 scopes
         registered_at=now - timedelta(days=180),
-        trust_score=0.85,
+        trust_score=8.5,
         is_active=True,
     )
 
@@ -233,9 +284,9 @@ if __name__ == "__main__":
         app_id="quickpay",
         name="QuickPay",
         category=AppCategory.PAYMENTS,
-        permissions="read:accounts,write:payments,read:transactions,read:balance,admin",  # 5 scopes
-        registered_at=now - timedelta(days=30),
-        trust_score=0.40,
+        permissions="payments:write,balances:read,accounts:read",  # 3 scopes
+        registered_at=now - timedelta(days=180),
+        trust_score=5.0,
         is_active=True,
     )
 
@@ -243,71 +294,96 @@ if __name__ == "__main__":
         app_id="taxeasy",
         name="TaxEasy",
         category=AppCategory.TAX,
-        permissions="read:accounts,read:transactions,write:payments",  # 3 scopes + payment mismatch
-        registered_at=now - timedelta(days=2),   # new_app_risk = True
-        trust_score=0.10,
+        permissions=(
+            "accounts:read,transactions:read,balances:read,"
+            "payments:write,consent:write,personal_info:read"
+        ),  # 6 scopes → excessive
+        registered_at=now - timedelta(hours=48),   # new_app_risk = True
+        trust_score=1.5,
         is_active=True,
     )
 
-    # --- Mock call logs ------------------------------------------------------
+    # --- Call logs matching scenarios.py seed patterns ----------------------
 
-    def _call(
-        app_id: str,
-        endpoint: str,
-        hour: int = 14,
-        amount: float | None = None,
-        minutes_ago: int = 1,
-    ) -> APICallLog:
-        ts = now.replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(
-            minutes=minutes_ago
-        )
-        return APICallLog(
-            app_id=app_id,
-            timestamp=ts,
-            endpoint=endpoint,
-            http_method="GET",
+    # Scenario 1 — BudgetBuddy: 15 overnight payments (scope mismatch + benford)
+    s1_amounts = [
+        540.0, 521.0, 567.0, 589.0, 512.0,
+        534.0, 578.0, 523.0, 556.0, 591.0,
+        543.0, 507.0, 568.0, 519.0, 545.0,
+    ]
+    budget_calls = [
+        APICallLog(
+            app_id="budgetbuddy",
+            endpoint="/open-banking/payments",
+            http_method="POST",
+            timestamp=today_2am + timedelta(minutes=i * 8),
             status_code=200,
-            response_time_ms=120.0,
+            response_time_ms=140.0,
+            amount=s1_amounts[i],
+        )
+        for i in range(15)
+    ]
+
+    # Scenario 2 — QuickPay: 8 structuring payments at 2am within 3 min
+    s2_amounts = [9800.0, 9750.0, 9900.0, 9850.0, 9820.0, 9780.0, 9920.0, 9870.0]
+    quick_calls = [
+        APICallLog(
+            app_id="quickpay",
+            endpoint="/open-banking/payments",
+            http_method="POST",
+            timestamp=today_2am + timedelta(seconds=i * 20),
+            status_code=200,
+            response_time_ms=95.0,
+            amount=s2_amounts[i],
+        )
+        for i in range(8)
+    ]
+
+    # Scenario 3 — TaxEasy: new app mixing payments + accounts + transactions
+    s3_pattern = [
+        ("/open-banking/payments",     "POST", 3,  450.0),
+        ("/open-banking/transactions", "GET",  2,  None),
+        ("/open-banking/payments",     "POST", 1,  880.0),
+        ("/open-banking/accounts",     "GET",  0,  None),
+        ("/open-banking/payments",     "POST", 4,  330.0),
+        ("/open-banking/accounts",     "GET",  5,  None),
+        ("/open-banking/transactions", "GET",  6,  None),
+        ("/open-banking/payments",     "POST", 7,  720.0),
+        ("/open-banking/accounts",     "GET",  8,  None),
+        ("/open-banking/transactions", "GET",  9,  None),
+        ("/open-banking/accounts",     "GET",  10, None),
+        ("/open-banking/transactions", "GET",  10, None),
+    ]
+    tax_calls = [
+        APICallLog(
+            app_id="taxeasy",
+            endpoint=ep,
+            http_method=method,
+            timestamp=(
+                now.replace(hour=3, minute=offset, second=0, microsecond=0)
+                if offset < 5
+                else now - timedelta(minutes=offset)
+            ),
+            status_code=200,
+            response_time_ms=165.0,
             amount=amount,
         )
-
-    # Scenario 1 — BudgetBuddy: normal daytime reads, no payment calls
-    budget_calls = [
-        _call("budgetbuddy", "/open-banking/accounts", hour=10, minutes_ago=i)
-        for i in range(1, 6)
-    ] + [
-        _call("budgetbuddy", "/open-banking/transactions", hour=11, amount=float(i * 31))
-        for i in range(1, 6)
-    ]
-
-    # Scenario 2 — QuickPay: high-frequency burst (12 calls in <5 min) + overnight
-    quick_calls = [
-        _call("quickpay", "/open-banking/payments", hour=2, amount=999.99 * i, minutes_ago=i)
-        for i in range(1, 13)   # 12 calls → high_frequency
-    ]
-
-    # Scenario 3 — TaxEasy: new app, low trust, calls payments endpoint (scope mismatch)
-    tax_calls = [
-        _call("taxeasy", "/open-banking/payments", hour=3, amount=float(i * 100), minutes_ago=i)
-        for i in range(1, 5)
-    ] + [
-        _call("taxeasy", "/open-banking/transactions", hour=14, amount=float(i * 57))
-        for i in range(1, 5)
+        for ep, method, offset, amount in s3_pattern
     ]
 
     # --- Evaluate and print results ------------------------------------------
 
     scenarios = [
-        ("BudgetBuddy (expect: low risk)",   budget_buddy, budget_calls),
-        ("QuickPay    (expect: high risk)",  quick_pay,    quick_calls),
-        ("TaxEasy     (expect: high risk)",  tax_easy,     tax_calls),
+        ("BudgetBuddy (expect: BLOCK ≥6.0)",  budget_buddy, budget_calls),
+        ("QuickPay    (expect: FLAG  3.5–5.9)", quick_pay,   quick_calls),
+        ("TaxEasy     (expect: BLOCK new+mismatch)", tax_easy, tax_calls),
     ]
 
     for label, app, calls in scenarios:
         signals = generate_risk_signals(app, calls)
-        print(f"\n{'=' * 60}")
+        print(f"\n{'=' * 62}")
         print(f"  {label}")
-        print(f"{'=' * 60}")
+        print(f"{'=' * 62}")
         print(f"  composite_risk_score   : {signals.composite_risk_score} / 10")
         print(f"  call_rate_per_minute   : {signals.call_rate_per_minute}")
         print(f"  off_hours_ratio        : {signals.off_hours_ratio}")

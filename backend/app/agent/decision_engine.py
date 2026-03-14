@@ -43,7 +43,14 @@ _MAX_TOKENS = 512
 _SYSTEM_PROMPT = (
     "You are a bank fraud analyst reviewing third-party fintech app behavior in "
     "Canada's Open Banking ecosystem. Be concise and precise. "
-    "Respond only in JSON with no preamble or markdown."
+    "Respond only in JSON with no preamble or markdown.\n\n"
+    "Verdict guidelines based on composite_risk_score (0–10):\n"
+    "  BLOCK  — score >= 6.0, OR any single critical signal (unusual_endpoint_ratio=100% "
+    "overnight, new app + payment scope mismatch, structuring pattern with overnight access)\n"
+    "  FLAG   — score 3.5–5.9, OR suspicious pattern without full confirmation "
+    "(e.g. overnight structuring burst, elevated call rate with benford anomaly)\n"
+    "  APPROVE — score < 3.5 and no critical single signals\n"
+    "Always weigh the qualitative signals alongside the score."
 )
 
 # Fallback values used when the API call or JSON parse fails
