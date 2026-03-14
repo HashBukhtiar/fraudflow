@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom'
 import { Shield, Zap, Brain, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import CyclingWord from './CyclingWord'
+import { lazy, Suspense } from 'react'
+const TDLogo3D = lazy(() => import('@/components/TDLogo3D'))
 
 const features = [
   {
@@ -34,60 +36,63 @@ export default function Landing() {
   return (
     <div className="flex flex-col">
       {/* Hero */}
-      <section className="relative flex flex-col items-center justify-center text-center px-6 pt-24 pb-16 overflow-hidden">
-        {/* subtle grid background */}
+      <section className="relative min-h-[90vh] flex items-center overflow-hidden">
+        {/* 3D logo — right half background */}
+        <div className="absolute right-0 top-0 w-2/3 h-full select-none" style={{ zIndex: 0 }}>
+          <Suspense fallback={null}>
+            <TDLogo3D />
+          </Suspense>
+        </div>
+
+        {/* subtle grid */}
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.03] dark:opacity-[0.06]"
           style={{
             backgroundImage:
               'linear-gradient(to right, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)',
             backgroundSize: '48px 48px',
+            zIndex: 1,
           }}
         />
 
-        <div
-          className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-border text-xs text-muted-foreground mb-8"
-          style={{ animation: 'var(--animate-fade-in)', animationDelay: '0.1s' }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-          Built for Canada's Open Banking future
-        </div>
+        {/* Left-aligned text content — pointer-events-none so canvas underneath gets drag events */}
+        <div className="relative z-10 max-w-6xl mx-auto px-8 lg:px-16 py-24 w-full pointer-events-none">
+          <div
+            className="inline-flex items-center gap-3 text-sm text-muted-foreground mb-8"
+            style={{ animation: 'var(--animate-fade-in)', animationDelay: '0.1s' }}
+          >
+            <span className="w-8 h-px bg-muted-foreground/50" />
+            Built for Canada's Open Banking future
+          </div>
 
-        <h1
-          className="text-5xl sm:text-7xl font-semibold tracking-tight leading-[1.1] mb-4"
-          style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.15s' }}
-        >
-          The AI built to{' '}
-          <CyclingWord />
-        </h1>
+          <h1
+            className="text-6xl sm:text-8xl font-normal tracking-tight leading-[1.05] mb-6 max-w-2xl"
+            style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.15s' }}
+          >
+            The AI built to{' '}
+            <CyclingWord />
+          </h1>
 
-        <p
-          className="max-w-xl text-muted-foreground text-lg mt-4 leading-relaxed"
-          style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.55s' }}
-        >
-          FraudFlow sits between your bank and third-party fintech apps, watching
-          how apps behave. When an app acts outside its declared purpose,
-          we catch it before your money moves.
-        </p>
+          <p
+            className="max-w-lg text-muted-foreground text-xl leading-relaxed"
+            style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.45s' }}
+          >
+            FraudFlow sits between your bank and third-party fintech apps,
+            watching how apps behave. When an app acts outside its declared
+            purpose, we catch it before your money moves.
+          </p>
 
-        <div
-          className="flex items-center gap-3 mt-8"
-          style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.7s' }}
-        >
-          <Button asChild size="lg">
-            <Link to="/consumer">View My Apps</Link>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <Link to="/analyst">Analyst View</Link>
-          </Button>
-        </div>
-
-        {/* 3D logo placeholder */}
-        <div
-          className="mt-16 w-full max-w-lg mx-auto h-72 rounded-2xl border border-border bg-muted/30 flex items-center justify-center"
-          style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.85s' }}
-        >
-          <p className="text-sm text-muted-foreground">[ 3D TD Bank logo goes here ]</p>
+          <div
+            className="flex items-center gap-3 mt-10 pointer-events-auto"
+            style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.6s' }}
+          >
+            <Button asChild size="lg">
+              <Link to="/consumer">View My Apps</Link>
+            </Button>
+            <Button asChild variant="outline" size="lg">
+              <Link to="/analyst">Analyst View</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
