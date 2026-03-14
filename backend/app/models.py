@@ -20,6 +20,21 @@ class TrustLevel(str, Enum):
     HIGH = "HIGH"
 
 
+class AppCategory(str, Enum):
+    BUDGETING = "budgeting"
+    PAYMENTS = "payments"
+    TAX = "tax"
+    LENDING = "lending"
+    INVESTING = "investing"
+    OTHER = "other"
+
+
+class AlertSeverity(str, Enum):
+    INFO = "info"
+    WARNING = "warning"
+    CRITICAL = "critical"
+
+
 # --- AppProfile ---
 
 class AppProfile(SQLModel, table=True):
@@ -28,6 +43,7 @@ class AppProfile(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     app_id: str = Field(index=True, unique=True)
     name: str
+    category: AppCategory = Field(default=AppCategory.OTHER)
     description: str = ""
     registered_at: datetime = Field(default_factory=datetime.utcnow)
     trust_score: float = Field(default=1.0, ge=0.0, le=10.0)
@@ -111,3 +127,22 @@ class FraudDecision(SQLModel, table=True):
     risk_signals: Optional[RiskSignals] = Relationship(
         back_populates="fraud_decision"
     )
+
+
+# --- AlertEvent ---
+
+class AlertEvent(SQLModel, table=True):
+    """Audit record of a significant fraud detection event."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    app_id: str = Field(foreign_key="appprofile.app_id", index=True)
+    fraud_decision_id: Optional[int] = Field(
+        default=None, foreign_key="frauddecision.id"
+    )
+    triggered_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+
+    title: str                                        # short headline
+    description: str = ""                            # full human-readable detail
+    severity: AlertSeverity = Field(default=AlertSeverity.INFO)
+    verdict: Verdict                                 # mirrors the decision verdict
+    resolved: bool = Field(default=False)
