@@ -34,36 +34,46 @@ export default function Layout() {
       {/* ── Header ── */}
       <header
         className={cn(
-          'fixed z-50 top-0 left-0 right-0 transition-all duration-500',
-          scrolled ? 'px-4 pt-3' : '',
+          'fixed z-50 top-0 left-0 right-0 transition-all duration-700',
+          scrolled ? 'px-6 pt-4' : '',
         )}
       >
         <nav
           className={cn(
-            'mx-auto max-w-[1400px] transition-all duration-500',
+            'mx-auto max-w-[1400px] transition-all duration-700',
             scrolled
-              ? 'bg-background/90 backdrop-blur-md border border-border shadow-lg rounded-2xl'
+              ? 'bg-background/90 backdrop-blur-xl border border-border shadow-2xl rounded-3xl'
               : 'bg-transparent',
           )}
         >
           <div
             className={cn(
-              'flex items-center justify-between transition-all duration-500 px-6 lg:px-8',
-              scrolled ? 'h-14' : 'h-20',
+              'flex items-center justify-between transition-all duration-700 px-8 lg:px-12',
+              scrolled ? 'h-16' : 'h-28',
             )}
           >
             {/* Logo */}
             <Link to="/" className="flex items-center gap-1.5 group">
-              <span className="font-semibold tracking-tight transition-all duration-500 text-xl">
+              <span
+                className={cn(
+                  'font-semibold tracking-tight transition-all duration-700',
+                  scrolled ? 'text-xl' : 'text-3xl',
+                )}
+              >
                 Fraud<span className="text-primary">Flow</span>
               </span>
-              <span className="text-muted-foreground font-mono text-[10px] mt-1 transition-all duration-500">
+              <span
+                className={cn(
+                  'text-muted-foreground font-mono transition-all duration-700',
+                  scrolled ? 'text-[10px] mt-1' : 'text-xs mt-2',
+                )}
+              >
                 AI
               </span>
             </Link>
 
             {/* Desktop nav */}
-            <div className="hidden md:flex items-center gap-10">
+            <div className={cn('hidden md:flex items-center transition-all duration-700', scrolled ? 'gap-10' : 'gap-14')}>
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -174,7 +184,7 @@ export default function Layout() {
       </div>
 
       {/* ── Page content — push down by header height ── */}
-      <main className="flex-1 pt-20">
+      <main className="flex-1 pt-28">
         <Outlet />
       </main>
     </div>
