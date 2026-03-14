@@ -17,6 +17,7 @@ Usage (in route definitions):
 """
 
 import time
+from datetime import datetime, timezone
 from typing import Annotated, Callable
 
 from fastapi import Depends, Header, HTTPException, Request
@@ -69,11 +70,15 @@ def _log_call(
     status_code: int,
     response_time_ms: float,
     flagged: bool,
+    permission_scope_used: str = "",
     user_id: str | None = None,
     ip_address: str | None = None,
     amount: float | None = None,
+    data_volume_kb: float = 0.0,
+    scenario_tag: str | None = None,
 ) -> APICallLog:
     """Persist an APICallLog record and return it."""
+    now = datetime.now(timezone.utc)
     log = APICallLog(
         app_id=app_id,
         endpoint=endpoint,
@@ -81,6 +86,10 @@ def _log_call(
         status_code=status_code,
         response_time_ms=response_time_ms,
         flagged=flagged,
+        time_of_day_hour=now.hour,
+        permission_scope_used=permission_scope_used,
+        data_volume_kb=data_volume_kb,
+        scenario_tag=scenario_tag,
         user_id=user_id,
         ip_address=ip_address,
         amount=amount,
@@ -138,6 +147,7 @@ def require_scope(required_scope: str) -> Callable:
                 status_code=403,
                 response_time_ms=elapsed_ms,
                 flagged=True,
+                permission_scope_used=required_scope,
                 ip_address=ip,
             )
             raise HTTPException(
@@ -157,6 +167,7 @@ def require_scope(required_scope: str) -> Callable:
             status_code=200,
             response_time_ms=elapsed_ms,
             flagged=False,
+            permission_scope_used=required_scope,
             ip_address=ip,
         )
 
