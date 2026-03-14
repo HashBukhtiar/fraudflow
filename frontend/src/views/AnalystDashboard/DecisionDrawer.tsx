@@ -4,7 +4,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import type { FraudDecision, AppProfile } from '@/api/types'
 
@@ -16,13 +15,13 @@ interface DecisionDrawerProps {
 }
 
 const verdictStyles: Record<FraudDecision['verdict'], string> = {
-  APPROVE: 'bg-green-100 text-green-800 border-green-200',
-  FLAG: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  ALLOW: 'bg-green-100 text-green-800 border-green-200',
+  FLAG:  'bg-yellow-100 text-yellow-800 border-yellow-200',
   BLOCK: 'bg-red-100 text-red-800 border-red-200',
 }
 
 export default function DecisionDrawer({ decision, apps, open, onClose }: DecisionDrawerProps) {
-  const app = apps.find((a) => a.id === decision?.app_id)
+  const app = apps.find((a) => a.app_id === decision?.app_id)
 
   return (
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
@@ -45,9 +44,6 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
                 <span className="text-muted-foreground">
                   {Math.round(decision.confidence * 100)}% confidence
                 </span>
-                {decision.memory_context_used && (
-                  <Badge variant="secondary" className="text-xs">memory hit</Badge>
-                )}
               </div>
 
               {app && (
@@ -70,7 +66,7 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
 
               <div>
                 <p className="text-xs text-muted-foreground mb-0.5">Timestamp</p>
-                <p>{new Date(decision.timestamp).toLocaleString()}</p>
+                <p>{new Date(decision.decided_at).toLocaleString()}</p>
               </div>
             </div>
           </>
