@@ -2,5 +2,5 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 sqlmodel>=0.0.21
 anthropic>=0.40.0
-moorcheh
+# moorcheh  # install from sponsor workshop kit — not on PyPI
 python-dotenv>=1.0.0
