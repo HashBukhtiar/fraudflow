@@ -90,9 +90,12 @@ export default function ConsumerDashboard() {
       <div className="border-b border-border bg-card">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            {/* TD-style logo mark */}
-            <div className="w-9 h-9 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <span className="text-primary-foreground font-bold text-sm tracking-tight">TD</span>
+            {/* TD-style logo mark — literal color so it never flashes on load */}
+            <div
+              className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+              style={{ backgroundColor: 'oklch(0.532 0.157 131.589)' }}
+            >
+              <span className="font-bold text-sm tracking-tight" style={{ color: 'oklch(0.986 0.031 120.757)' }}>TD</span>
             </div>
             <div>
               <p className="font-semibold text-sm leading-tight">TD Bank</p>
