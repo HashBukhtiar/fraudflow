@@ -87,9 +87,16 @@ const MOCK_DECISIONS: FraudDecision[] = [
 
 const verdictConfig: Record<string, string> = {
   APPROVE: 'bg-primary/10 text-primary border-primary/20',
-  ALLOW: 'bg-primary/10 text-primary border-primary/20',
-  FLAG: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  BLOCK: 'bg-destructive/10 text-destructive border-destructive/20',
+  ALLOW:   'bg-primary/10 text-primary border-primary/20',
+  FLAG:    'bg-amber-500/10 text-amber-600 border-amber-500/20',
+  BLOCK:   'bg-destructive/10 text-destructive border-destructive/20',
+}
+
+function timeAgo(iso: string) {
+  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (diff < 60) return 'Just now'
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  return `${Math.floor(diff / 3600)}h ago`
 }
 
 export default function AnalystDashboard() {
@@ -104,112 +111,222 @@ export default function AnalystDashboard() {
         setApps(appsData)
         setDecisions(decisionsData)
       })
-      .catch(() => {
-        // fall back to mock data
-      })
+      .catch(() => {})
   }, [])
 
-  const blocked = (decisions as any[]).filter((d) => d.verdict === 'BLOCK').length
-  const flagged = (decisions as any[]).filter((d) => d.verdict === 'FLAG').length
+  const blocked      = (decisions as any[]).filter((d) => d.verdict === 'BLOCK').length
+  const flagged      = (decisions as any[]).filter((d) => d.verdict === 'FLAG').length
   const blockedCalls = (calls as any[]).filter((c) => !(c.allowed ?? !c.flagged)).length
+  const totalCalls   = calls.length
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-10 space-y-8">
-      {/* Header */}
-      <div className="border-b border-border pb-6">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">
-          Analyst View
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">Activity Overview</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Real-time view of third-party app activity and fraud decisions.
-        </p>
+    <div className="min-h-screen bg-background">
+      {/* Internal tool header */}
+      <div className="border-b border-border bg-card">
+        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* FraudFlow logo mark */}
+            <div className="w-9 h-9 rounded-lg bg-foreground flex items-center justify-center shrink-0">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-background">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+            </div>
+            <div>
+              <p className="font-semibold text-sm leading-tight">FraudFlow</p>
+              <p className="text-xs text-muted-foreground">Security Operations</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Live status */}
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+              </span>
+              <span className="text-xs text-muted-foreground">Live</span>
+            </div>
+
+            {/* Analyst avatar */}
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-full bg-muted border border-border flex items-center justify-center">
+                <span className="text-xs font-semibold text-muted-foreground">SR</span>
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-xs font-medium leading-tight">Sarah R.</p>
+                <p className="text-xs text-muted-foreground">Fraud Analyst</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: 'Blocked', value: blocked, colorClass: 'text-destructive' },
-          { label: 'Flagged', value: flagged, colorClass: 'text-amber-600' },
-          { label: 'Blocked Calls', value: blockedCalls, colorClass: 'text-destructive' },
-        ].map((stat) => (
-          <Card key={stat.label}>
+      <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
+
+        {/* Page heading */}
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Activity Overview</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Monitoring <span className="font-medium text-foreground">{apps.length} registered apps</span> across{' '}
+            <span className="font-medium text-foreground">{totalCalls} API calls</span> today.
+          </p>
+        </div>
+
+        {/* Stat cards */}
+        <div className="grid grid-cols-3 gap-4">
+          {/* Blocked decisions */}
+          <Card>
             <CardContent className="pt-5 pb-4">
-              <p className={cn('text-3xl font-bold tabular-nums', stat.colorClass)}>
-                {stat.value}
-              </p>
-              <p className="text-xs text-muted-foreground mt-1 uppercase tracking-wider">
-                {stat.label}
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className={cn('text-3xl font-bold tabular-nums', blocked > 0 ? 'text-destructive' : 'text-foreground')}>
+                    {blocked}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Blocked</p>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-destructive">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                    <line x1="9" y1="9" x2="15" y2="15" />
+                    <line x1="15" y1="9" x2="9" y2="15" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Requests fully blocked</p>
+            </CardContent>
+          </Card>
+
+          {/* Flagged decisions */}
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className={cn('text-3xl font-bold tabular-nums', flagged > 0 ? 'text-amber-600' : 'text-foreground')}>
+                    {flagged}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Flagged</p>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600">
+                    <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                    <line x1="4" y1="22" x2="4" y2="15" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">Awaiting review</p>
+            </CardContent>
+          </Card>
+
+          {/* Blocked calls */}
+          <Card>
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className={cn('text-3xl font-bold tabular-nums', blockedCalls > 0 ? 'text-destructive' : 'text-foreground')}>
+                    {blockedCalls}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">Blocked Calls</p>
+                </div>
+                <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-destructive">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
+                  </svg>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {totalCalls > 0 ? `${Math.round((blockedCalls / totalCalls) * 100)}% of total traffic` : 'No traffic yet'}
               </p>
             </CardContent>
           </Card>
-        ))}
-      </div>
-
-      {/* Feed + Risk */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <CallFeed calls={calls} apps={apps} />
         </div>
-        <div>
-          <RiskRankList apps={apps} />
-        </div>
-      </div>
 
-      {/* Decisions table */}
-      <Card>
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-sm font-semibold">Recent Decisions</CardTitle>
-            <span className="text-xs text-muted-foreground">{decisions.length} total</span>
+        {/* Feed + Risk */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <CallFeed calls={calls} apps={apps} />
           </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border">
-              <tr className="text-xs text-muted-foreground uppercase tracking-wider">
-                <th className="text-left px-4 py-2.5 font-medium">App</th>
-                <th className="text-left px-4 py-2.5 font-medium">Verdict</th>
-                <th className="text-left px-4 py-2.5 font-medium">Confidence</th>
-                <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">Time</th>
-                <th className="text-left px-4 py-2.5 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {decisions.map((decision) => {
-                const d = decision as any
-                const app = apps.find((a) => (a as any).id === d.app_id) as any
-                return (
-                  <tr
-                    key={d.id}
-                    className="border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer transition-colors"
-                    onClick={() => setSelected(decision)}
-                  >
-                    <td className="px-4 py-3 font-medium">{app?.name ?? d.app_id}</td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-full border text-xs font-bold tracking-wide',
-                          verdictConfig[d.verdict] ?? verdictConfig.BLOCK,
+          <div>
+            <RiskRankList apps={apps} />
+          </div>
+        </div>
+
+        {/* Decisions */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold">Recent Decisions</CardTitle>
+              <span className="text-xs text-muted-foreground">{decisions.length} total</span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border">
+                <tr className="text-xs text-muted-foreground uppercase tracking-wider">
+                  <th className="text-left px-4 py-2.5 font-medium">App</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Verdict</th>
+                  <th className="text-left px-4 py-2.5 font-medium">Confidence</th>
+                  <th className="text-left px-4 py-2.5 font-medium hidden sm:table-cell">When</th>
+                  <th className="text-left px-4 py-2.5 font-medium" />
+                </tr>
+              </thead>
+              <tbody>
+                {decisions.map((decision) => {
+                  const d = decision as any
+                  const app = apps.find((a) => (a as any).id === d.app_id) as any
+                  return (
+                    <tr
+                      key={d.id}
+                      className="border-b border-border last:border-0 hover:bg-muted/30 cursor-pointer transition-colors group"
+                      onClick={() => setSelected(decision)}
+                    >
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-sm">{app?.name ?? d.app_id}</p>
+                        {d.memory_context_used && (
+                          <span className="text-xs text-muted-foreground">memory hit</span>
                         )}
-                      >
-                        {d.verdict}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                      {Math.round(d.confidence * 100)}%
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground font-mono hidden sm:table-cell">
-                      {new Date(d.timestamp ?? d.decided_at).toLocaleTimeString()}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-primary">Details →</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={cn(
+                            'px-2 py-0.5 rounded-full border text-xs font-bold tracking-wide',
+                            verdictConfig[d.verdict] ?? verdictConfig.BLOCK,
+                          )}
+                        >
+                          {d.verdict}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden hidden sm:block">
+                            <div
+                              className={cn(
+                                'h-full rounded-full',
+                                d.verdict === 'BLOCK' ? 'bg-destructive' : d.verdict === 'FLAG' ? 'bg-amber-500' : 'bg-primary',
+                              )}
+                              style={{ width: `${Math.round(d.confidence * 100)}%` }}
+                            />
+                          </div>
+                          <span className="font-mono text-xs text-muted-foreground">
+                            {Math.round(d.confidence * 100)}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground hidden sm:table-cell">
+                        {timeAgo(d.timestamp ?? d.decided_at)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        View details →
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+
+      </div>
 
       <DecisionDrawer
         decision={selected}
