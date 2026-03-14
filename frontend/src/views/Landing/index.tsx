@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Shield, Zap, Brain, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import CyclingWord from './CyclingWord'
 
 const features = [
   {
@@ -29,8 +30,6 @@ const features = [
   },
 ]
 
-const words = ['Detect.', 'Explain.', 'Block.']
-
 export default function Landing() {
   return (
     <div className="flex flex-col">
@@ -54,23 +53,12 @@ export default function Landing() {
           Built for Canada's Open Banking future
         </div>
 
-        <h1 className="text-5xl sm:text-7xl font-semibold tracking-tight leading-none mb-4">
-          {words.map((word, i) => (
-            <span
-              key={word}
-              className="inline-block mr-4 last:mr-0"
-              style={{
-                animation: 'var(--animate-char-reveal)',
-                animationDelay: `${0.15 + i * 0.12}s`,
-              }}
-            >
-              {i === 1 ? (
-                <span className="text-primary">{word}</span>
-              ) : (
-                word
-              )}
-            </span>
-          ))}
+        <h1
+          className="text-5xl sm:text-7xl font-semibold tracking-tight leading-[1.1] mb-4"
+          style={{ animation: 'var(--animate-fade-up)', animationDelay: '0.15s' }}
+        >
+          The AI built to{' '}
+          <CyclingWord />
         </h1>
 
         <p
