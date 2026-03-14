@@ -21,10 +21,10 @@ End-to-end demo flow:
 
 ## Stack
 - Backend: Python 3.11 + FastAPI
-- Frontend: React + Vite + Tailwind + shadcn/ui
+- Frontend: React + Vite + Tailwind + shadcn/ui + Framer Motion
 - Data: SQLite + SQLModel
 - Memory: Moorcheh
-- AI: Use claude-haiku-4-5-20251001 via the Anthropic SDK. API key is in .env as ANTHROPIC_API_KEY.
+- AI: Use claude-haiku-4-5-20251001 via the Anthropic SDK. API key is in .env.local as ANTHROPIC_API_KEY.
 
 ## Project Structure
 fraudflow/
@@ -99,16 +99,16 @@ Do not change model shapes without team agreement.
 
 ## Seed Apps (data/seeds/apps.json)
 Three apps minimum:
-- BudgetBuddy (category: budgeting, trust_score: 0.85, status: active)
-- QuickPay (category: payments, trust_score: 0.40, status: flagged)  
-- TaxEasy (category: tax, trust_score: 0.10, status: active, 
+- BudgetBuddy (category: budgeting, trust_score: 8.5, status: active)
+- QuickPay (category: payments, trust_score: 5.0, status: flagged)  
+- TaxEasy (category: tax, trust_score: 1.5, status: active, 
     registered 2 days ago)
 These are the three demo scenario apps. Do not rename them.
 
 ## Model Field Specs
 
 AppProfile: id, name, category, permissions_requested (list), 
-  registration_date, trust_score (float 0-1), status (active/suspended)
+  registration_date, trust_score (float 0-10), status (active/suspended)
 
 APICallLog: id, app_id, user_id, endpoint, timestamp, time_of_day_hour,
   data_volume_kb, permission_scope_used, allowed (bool), scenario_tag
@@ -138,11 +138,55 @@ Frontend depends on:
 - GET /api/alerts
 - GET /api/decisions
 - POST /api/demo/trigger/{scenario}
+- GET /api/profile/{app_id}  ← returns RiskSignals
 
 Mock Open Banking routes:
 - GET /open-banking/accounts
 - GET /open-banking/transactions
 - POST /open-banking/payments
+
+## Decision Timeline Visualization
+
+The Demo page shows an animated vertical pipeline timeline instead of a flat result card.
+No new backend endpoints are needed — all data comes from `POST /api/demo/trigger/{scenario}`.
+
+**Pipeline steps (in order):**
+1. **Fintech App Request** — app name + endpoint being called
+2. **Gateway Intercept** — timestamp (seeded call time) + HTTP method
+3. **Behaviour Profiler** — off-hours ratio, unusual endpoint ratio, composite risk score
+4. **Memory Lookup** — static flavour text per scenario (stubbed)
+5. **AI Reasoning** — `decision.explanation` from the real API response
+6. **Final Decision** — `decision.verdict` + `decision.recommended_action` + `decision.confidence`
+
+**Animation model:**
+- Steps start as `"pending"` → `"active"` (spinner/pulse) → `"done"`
+- ~600ms `setTimeout` cascade between steps
+- Framer Motion (`motion.div`) for enter animations
+- Final step: red=BLOCK, amber=FLAG, green=APPROVE
+
+**Component structure:**
+```
+frontend/src/views/Demo/
+  index.tsx              ← orchestrator: step state, API call, timeline driver
+  DecisionTimeline.tsx   ← renders the full vertical pipeline
+  TimelineStep.tsx       ← individual step card (pending/active/done)
+```
+
+**Step state model:**
+```ts
+type StepStatus = 'pending' | 'active' | 'done'
+interface TimelineStep {
+  id: string
+  label: string
+  status: StepStatus
+  detail?: React.ReactNode
+}
+```
+
+**Hardcoded profiler signal values per scenario** (deterministic — no extra API call needed):
+- S1 BudgetBuddy: off_hours=100%, unusual_endpoint=100%, composite=6.05/10
+- S2 QuickPay: off_hours=100%, benford=1.000 (structuring), composite=4.14/10
+- S3 TaxEasy: new_app=true, excessive_perms=6, unusual_endpoint=33%, composite=5.03/10
 
 ## Out of Scope
 Do not build first:
