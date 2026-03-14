@@ -7,9 +7,9 @@ interface AlertsFeedProps {
 }
 
 const severityStyles: Record<AlertEvent['severity'], string> = {
-  low: 'bg-blue-50 border-blue-200 text-blue-800',
-  medium: 'bg-yellow-50 border-yellow-200 text-yellow-800',
-  high: 'bg-red-50 border-red-200 text-red-800',
+  info:     'bg-blue-50 border-blue-200 text-blue-800',
+  warning:  'bg-yellow-50 border-yellow-200 text-yellow-800',
+  critical: 'bg-red-50 border-red-200 text-red-800',
 }
 
 export default function AlertsFeed({ alerts }: AlertsFeedProps) {
@@ -33,10 +33,10 @@ export default function AlertsFeed({ alerts }: AlertsFeedProps) {
             <div className="flex items-center justify-between gap-2">
               <span className="font-medium capitalize">{alert.severity}</span>
               <span className="text-xs opacity-70">
-                {new Date(alert.timestamp).toLocaleTimeString()}
+                {new Date(alert.triggered_at).toLocaleTimeString()}
               </span>
             </div>
-            <p className="mt-0.5 text-xs">{alert.message}</p>
+            <p className="mt-0.5 text-xs">{alert.description}</p>
           </div>
         ))}
       </CardContent>
