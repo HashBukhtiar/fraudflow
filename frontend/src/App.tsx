@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import ConsumerDashboard from '@/views/ConsumerDashboard'
 import AnalystDashboard from '@/views/AnalystDashboard'
+import DemoScenarios from '@/views/Demo'
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
           <Route index element={<Navigate to="/consumer" replace />} />
           <Route path="consumer" element={<ConsumerDashboard />} />
           <Route path="analyst" element={<AnalystDashboard />} />
+          <Route path="demo" element={<DemoScenarios />} />
         </Route>
       </Routes>
     </BrowserRouter>
