@@ -22,7 +22,6 @@ export default function Layout() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // lock body scroll when mobile menu is open
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
@@ -35,29 +34,30 @@ export default function Layout() {
       <header
         className={cn(
           'fixed z-50 top-0 left-0 right-0 transition-all duration-700',
-          scrolled ? 'px-6 pt-4' : '',
+          scrolled ? 'px-6 pt-4' : 'px-0 pt-0',
         )}
       >
         <nav
           className={cn(
-            'mx-auto max-w-[1400px] transition-all duration-700',
+            // always-on: rounded + border so they never flash in
+            'mx-auto max-w-[1400px] rounded-3xl border transition-all duration-700',
             scrolled
-              ? 'bg-background/90 backdrop-blur-xl border border-border shadow-2xl rounded-3xl'
-              : 'bg-transparent',
+              ? 'bg-background/75 backdrop-blur-xl border-border shadow-2xl'
+              : 'bg-transparent border-transparent shadow-none backdrop-blur-none',
           )}
         >
           <div
             className={cn(
               'flex items-center justify-between transition-all duration-700 px-8 lg:px-12',
-              scrolled ? 'h-16' : 'h-28',
+              scrolled ? 'h-14' : 'h-24',
             )}
           >
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-1.5 group">
+            <Link to="/" className="flex items-center gap-1.5">
               <span
                 className={cn(
                   'font-semibold tracking-tight transition-all duration-700',
-                  scrolled ? 'text-xl' : 'text-3xl',
+                  scrolled ? 'text-xl' : 'text-[2rem]',
                 )}
               >
                 Fraud<span className="text-primary">Flow</span>
@@ -73,7 +73,12 @@ export default function Layout() {
             </Link>
 
             {/* Desktop nav */}
-            <div className={cn('hidden md:flex items-center transition-all duration-700', scrolled ? 'gap-10' : 'gap-14')}>
+            <div
+              className={cn(
+                'hidden md:flex items-center transition-all duration-700',
+                scrolled ? 'gap-10' : 'gap-14',
+              )}
+            >
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
@@ -81,7 +86,7 @@ export default function Layout() {
                   end={item.end}
                   className={({ isActive }) =>
                     cn(
-                      'relative group text-sm transition-colors duration-300',
+                      'relative group text-base transition-colors duration-300',
                       isActive ? 'text-foreground' : 'text-foreground/60 hover:text-foreground',
                     )
                   }
@@ -183,8 +188,7 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* ── Page content — push down by header height ── */}
-      <main className="flex-1 pt-28">
+      <main className="flex-1 pt-24">
         <Outlet />
       </main>
     </div>
