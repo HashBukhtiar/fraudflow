@@ -67,10 +67,16 @@ class APICallLog(SQLModel, table=True):
     http_method: str = Field(default="GET")
     status_code: int
     response_time_ms: float
-    amount: Optional[float] = Field(default=None)  # dollar amount if relevant
-    user_id: Optional[str] = Field(default=None)    # end-user being acted on
+    amount: Optional[float] = Field(default=None)       # dollar amount if relevant
+    user_id: Optional[str] = Field(default=None)        # end-user being acted on
     ip_address: Optional[str] = Field(default=None)
     flagged: bool = Field(default=False)
+
+    # Telemetry enrichment fields (Feature 3)
+    time_of_day_hour: int = Field(default=0)            # 0–23, derived from timestamp
+    permission_scope_used: str = Field(default="")      # scope checked on this call
+    data_volume_kb: float = Field(default=0.0)          # response size stub (populated later)
+    scenario_tag: Optional[str] = Field(default=None)   # set by demo orchestrator
 
     app: Optional[AppProfile] = Relationship(back_populates="call_logs")
 
