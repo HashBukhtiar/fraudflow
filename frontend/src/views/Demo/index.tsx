@@ -1,9 +1,13 @@
-import { useState } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { triggerScenario } from '@/api/client'
 import type { FraudDecision } from '@/api/types'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import DecisionTimeline from './DecisionTimeline'
+import type { StepStatus, TimelineStepData } from './TimelineStep'
+
+/* ─── Scenario definitions ─── */
 
 interface Scenario {
   id: string
@@ -11,6 +15,8 @@ interface Scenario {
   name: string
   description: string
   app: string
+  endpoint: string
+  httpMethod: string
   expectedVerdict: 'BLOCK' | 'FLAG'
 }
 
@@ -22,6 +28,8 @@ const SCENARIOS: Scenario[] = [
     description:
       'BudgetBuddy starts making API calls at 3am, hitting payment endpoints outside its declared budgeting scope.',
     app: 'BudgetBuddy',
+    endpoint: '/open-banking/transactions',
+    httpMethod: 'GET',
     expectedVerdict: 'BLOCK',
   },
   {
@@ -31,6 +39,8 @@ const SCENARIOS: Scenario[] = [
     description:
       'QuickPay fires 8 payments just under $10,000 within 3 minutes — a classic structuring pattern.',
     app: 'QuickPay',
+    endpoint: '/open-banking/payments',
+    httpMethod: 'POST',
     expectedVerdict: 'FLAG',
   },
   {
@@ -40,41 +50,197 @@ const SCENARIOS: Scenario[] = [
     description:
       'TaxEasy, registered 48 hours ago, requests excessive permissions and shows Benford deviation patterns consistent with data harvesting.',
     app: 'TaxEasy',
+    endpoint: '/open-banking/accounts',
+    httpMethod: 'GET',
     expectedVerdict: 'BLOCK',
   },
 ]
 
-type RunState = 'idle' | 'running' | 'done' | 'error'
+/* ─── Hardcoded profiler signal details per scenario ─── */
 
-type ScenarioResult = Pick<FraudDecision, 'verdict' | 'explanation' | 'confidence' | 'recommended_action'>
-
-const verdictConfig: Record<string, string> = {
-  APPROVE: 'bg-primary/10 text-primary border-primary/20',
-  ALLOW: 'bg-primary/10 text-primary border-primary/20',
-  FLAG: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
-  BLOCK: 'bg-destructive/10 text-destructive border-destructive/20',
+const PROFILER_DETAILS: Record<string, React.ReactNode> = {
+  rogue_budgeting_app: (
+    <>
+      <p>Off-hours access: <span className="font-mono text-foreground">100%</span></p>
+      <p>Unusual endpoint ratio: <span className="font-mono text-foreground">100%</span></p>
+      <p>Composite risk score: <span className="font-mono text-foreground">6.05 / 10</span></p>
+    </>
+  ),
+  payment_anomaly: (
+    <>
+      <p>Off-hours access: <span className="font-mono text-foreground">100%</span></p>
+      <p>Benford deviation: <span className="font-mono text-foreground">1.000</span> (structuring)</p>
+      <p>Composite risk score: <span className="font-mono text-foreground">4.14 / 10</span></p>
+    </>
+  ),
+  social_engineering: (
+    <>
+      <p>New app: <span className="font-mono text-foreground">true</span> (48 h old)</p>
+      <p>Excessive permissions: <span className="font-mono text-foreground">6 scopes</span></p>
+      <p>Unusual endpoint ratio: <span className="font-mono text-foreground">33%</span></p>
+      <p>Composite risk score: <span className="font-mono text-foreground">5.03 / 10</span></p>
+    </>
+  ),
 }
+
+const MEMORY_DETAILS: Record<string, React.ReactNode> = {
+  rogue_budgeting_app: (
+    <>
+      <p>Similar pattern found in historical records</p>
+      <p>Matched <span className="font-mono text-foreground">3</span> suspicious fintech apps with overnight data-harvesting behaviour</p>
+    </>
+  ),
+  payment_anomaly: (
+    <>
+      <p>Structuring pattern previously observed</p>
+      <p>Matched <span className="font-mono text-foreground">2</span> flagged payment apps with sub-threshold bursts</p>
+    </>
+  ),
+  social_engineering: (
+    <>
+      <p>New-app risk pattern detected</p>
+      <p>Matched <span className="font-mono text-foreground">4</span> recently registered apps with excessive permission requests</p>
+    </>
+  ),
+}
+
+/* ─── Step builder ─── */
+
+const STEP_DELAY = 600
+
+function buildSteps(): TimelineStepData[] {
+  return [
+    { id: 'request', label: `Fintech App Request`, status: 'pending' as StepStatus },
+    { id: 'gateway', label: `Gateway Intercept`, status: 'pending' as StepStatus },
+    { id: 'profiler', label: `Behaviour Profiler`, status: 'pending' as StepStatus },
+    { id: 'memory', label: `Memory Lookup`, status: 'pending' as StepStatus },
+    { id: 'ai', label: `AI Reasoning`, status: 'pending' as StepStatus },
+    { id: 'decision', label: `Final Decision`, status: 'pending' as StepStatus },
+  ]
+}
+
+/* ─── Expected-verdict badge colours ─── */
 
 const expectedConfig: Record<'BLOCK' | 'FLAG', string> = {
   BLOCK: 'bg-destructive/10 text-destructive border-destructive/20',
   FLAG: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
 }
 
+const verdictLabel: Record<string, string> = {
+  BLOCK: 'BLOCKED',
+  FLAG: 'FLAGGED',
+  APPROVE: 'APPROVED',
+  ALLOW: 'ALLOWED',
+}
+
+/* ─── Component ─── */
+
+type RunState = 'idle' | 'running' | 'done' | 'error'
+
 export default function DemoScenarios() {
   const [states, setStates] = useState<Record<string, RunState>>({})
-  const [results, setResults] = useState<Record<string, ScenarioResult>>({})
+  const [steps, setSteps] = useState<Record<string, TimelineStepData[]>>({})
+  const [results, setResults] = useState<Record<string, FraudDecision>>({})
+  const timersRef = useRef<number[]>([])
 
-  const run = async (id: string) => {
-    setStates((s) => ({ ...s, [id]: 'running' }))
-    setResults((r) => ({ ...r, [id]: {} as ScenarioResult }))
-    try {
-      const data = await triggerScenario(id)
-      setResults((r) => ({ ...r, [id]: data as ScenarioResult }))
-      setStates((s) => ({ ...s, [id]: 'done' }))
-    } catch {
-      setStates((s) => ({ ...s, [id]: 'error' }))
-    }
-  }
+  const advanceStep = useCallback(
+    (scenarioId: string, stepIndex: number, status: StepStatus, detail?: React.ReactNode) => {
+      setSteps((prev) => {
+        const list = [...(prev[scenarioId] ?? [])]
+        list[stepIndex] = { ...list[stepIndex], status, detail: detail ?? list[stepIndex].detail }
+        return { ...prev, [scenarioId]: list }
+      })
+    },
+    [],
+  )
+
+  const run = useCallback(
+    async (scenario: Scenario) => {
+      const id = scenario.id
+
+      // Clear old timers
+      timersRef.current.forEach(clearTimeout)
+      timersRef.current = []
+
+      // Reset state
+      setStates((s) => ({ ...s, [id]: 'running' }))
+      setSteps((s) => ({ ...s, [id]: buildSteps() }))
+      setResults((r) => {
+        const next = { ...r }
+        delete next[id]
+        return next
+      })
+
+      // Kick off API call immediately
+      const apiPromise = triggerScenario(id)
+
+      // Animate steps 0–3 with delays (these don't need API data)
+      const delay = (ms: number) =>
+        new Promise<void>((resolve) => {
+          const t = window.setTimeout(resolve, ms)
+          timersRef.current.push(t)
+        })
+
+      // Step 0: Request
+      advanceStep(id, 0, 'active')
+      await delay(STEP_DELAY)
+      advanceStep(id, 0, 'done', (
+        <>
+          <p><span className="font-mono text-foreground">{scenario.app}</span> → <span className="font-mono text-foreground">{scenario.httpMethod} {scenario.endpoint}</span></p>
+        </>
+      ))
+
+      // Step 1: Gateway
+      advanceStep(id, 1, 'active')
+      await delay(STEP_DELAY)
+      advanceStep(id, 1, 'done', (
+        <>
+          <p>Gateway intercepted request</p>
+          <p>Method: <span className="font-mono text-foreground">{scenario.httpMethod}</span></p>
+        </>
+      ))
+
+      // Step 2: Profiler
+      advanceStep(id, 2, 'active')
+      await delay(STEP_DELAY)
+      advanceStep(id, 2, 'done', PROFILER_DETAILS[id])
+
+      // Step 3: Memory
+      advanceStep(id, 3, 'active')
+      await delay(STEP_DELAY)
+      advanceStep(id, 3, 'done', MEMORY_DETAILS[id])
+
+      // Step 4: AI — wait for actual API result
+      advanceStep(id, 4, 'active')
+      try {
+        const data = await apiPromise
+
+        await delay(STEP_DELAY)
+        advanceStep(id, 4, 'done', (
+          <p className="leading-relaxed">{data.explanation}</p>
+        ))
+
+        // Step 5: Final decision
+        advanceStep(id, 5, 'active')
+        await delay(STEP_DELAY)
+        advanceStep(id, 5, 'done', (
+          <>
+            <p className="text-base font-bold text-foreground">
+              {verdictLabel[data.verdict] ?? data.verdict}
+            </p>
+            <p>Confidence: <span className="font-mono text-foreground">{Math.round(data.confidence * 100)}%</span></p>
+            <p>Action: <span className="text-foreground">{data.recommended_action}</span></p>
+          </>
+        ))
+
+        setResults((r) => ({ ...r, [id]: data }))
+        setStates((s) => ({ ...s, [id]: 'done' }))
+      } catch {
+        setStates((s) => ({ ...s, [id]: 'error' }))
+      }
+    },
+    [advanceStep],
+  )
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-10 space-y-10">
@@ -85,15 +251,16 @@ export default function DemoScenarios() {
         </p>
         <h1 className="text-2xl font-semibold tracking-tight">Demo</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Trigger scripted fraud scenarios and watch FraudFlow respond in real time.
+          Trigger scripted fraud scenarios and watch FraudFlow's decision pipeline unfold in real time.
         </p>
       </div>
 
       {/* Scenario list */}
-      <div className="space-y-4">
+      <div className="space-y-6">
         {SCENARIOS.map((scenario) => {
           const state = states[scenario.id] ?? 'idle'
-          const result = results[scenario.id] as any
+          const scenarioSteps = steps[scenario.id]
+          const result = results[scenario.id]
 
           return (
             <Card key={scenario.id}>
@@ -135,10 +302,10 @@ export default function DemoScenarios() {
                         size="sm"
                         variant={state === 'done' ? 'secondary' : 'default'}
                         disabled={state === 'running'}
-                        onClick={() => run(scenario.id)}
+                        onClick={() => run(scenario)}
                       >
                         {state === 'idle' && 'Run Scenario'}
-                        {state === 'running' && 'Running…'}
+                        {state === 'running' && 'Running\u2026'}
                         {state === 'done' && 'Run Again'}
                         {state === 'error' && 'Retry'}
                       </Button>
@@ -150,44 +317,13 @@ export default function DemoScenarios() {
                       )}
                     </div>
 
-                    {/* Result */}
-                    {state === 'done' && result && (
-                      <div className="border border-border rounded-md bg-muted/30 px-4 py-3 space-y-2.5 mt-1">
-                        {result.verdict && (
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              className={cn(
-                                'px-2.5 py-0.5 rounded-full border text-xs font-bold tracking-wide',
-                                verdictConfig[result.verdict] ?? verdictConfig.BLOCK,
-                              )}
-                            >
-                              {result.verdict}
-                            </span>
-                            {result.confidence !== undefined && (
-                              <span className="text-xs text-muted-foreground font-mono">
-                                {Math.round(result.confidence * 100)}% confidence
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {result.explanation && (
-                          <p className="text-sm text-foreground/80 leading-relaxed">
-                            {result.explanation}
-                          </p>
-                        )}
-                        {result.recommended_action && (
-                          <p className="text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground uppercase tracking-wider">
-                              Action
-                            </span>{' '}
-                            — {result.recommended_action}
-                          </p>
-                        )}
-                        {!result.verdict && (
-                          <p className="text-xs text-muted-foreground">
-                            Scenario triggered successfully.
-                          </p>
-                        )}
+                    {/* Decision Timeline */}
+                    {scenarioSteps && (state === 'running' || state === 'done') && (
+                      <div className="mt-2">
+                        <DecisionTimeline
+                          steps={scenarioSteps}
+                          verdict={result?.verdict}
+                        />
                       </div>
                     )}
                   </div>
