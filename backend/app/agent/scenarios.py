@@ -58,10 +58,16 @@ def _delete_seeded(ids: list[int], db: Session) -> None:
 # ---------------------------------------------------------------------------
 
 def scenario_rogue_budgeting_app(db: Session) -> FraudDecision:
-    """BudgetBuddy repeatedly calls /open-banking/payments overnight.
+    """BudgetBuddy attempts payment calls at 3am — token abuse / scope violation.
+
+    BudgetBuddy only has read permissions (accounts:read, transactions:read,
+    balances:read).  The rogue behaviour is that someone (or malware) is using
+    BudgetBuddy's credentials to *attempt* payment operations it was never
+    granted — all at 3am.  The gateway rejects with 403, but the pattern
+    itself is a critical fraud signal.
 
     Signals fired:
-      • unusual_endpoint_ratio = 1.0  (budgeting app on payments endpoint)
+      • unusual_endpoint_ratio = 1.0  (budgeting app calling /payments)
       • off_hours_ratio = 1.0         (all calls between 02:00–04:00)
       • benford_score high            (all amounts start with 5 — non-natural)
     """

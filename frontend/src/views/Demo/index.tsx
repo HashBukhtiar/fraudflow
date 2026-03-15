@@ -26,10 +26,10 @@ const SCENARIOS: Scenario[] = [
     num: '01',
     name: 'Rogue Budgeting App',
     description:
-      'BudgetBuddy starts making API calls at 3am, hitting payment endpoints outside its declared budgeting scope.',
+      'BudgetBuddy starts attempting payment calls at 3am — it only has read permissions, so these are unauthorized scope violations indicating token abuse.',
     app: 'BudgetBuddy',
-    endpoint: '/open-banking/transactions',
-    httpMethod: 'GET',
+    endpoint: '/open-banking/payments',
+    httpMethod: 'POST',
     expectedVerdict: 'BLOCK',
   },
   {
@@ -62,7 +62,7 @@ const PROFILER_DETAILS: Record<string, React.ReactNode> = {
   rogue_budgeting_app: (
     <>
       <p>Off-hours access: <span className="font-mono text-foreground">100%</span></p>
-      <p>Unusual endpoint ratio: <span className="font-mono text-foreground">100%</span></p>
+      <p>Scope violation: <span className="font-mono text-foreground">100%</span> (read-only app calling payments)</p>
       <p>Composite risk score: <span className="font-mono text-foreground">6.05 / 10</span></p>
     </>
   ),
