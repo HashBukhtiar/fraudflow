@@ -14,6 +14,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
+from app.constants import API_DEFAULT_LIST_LIMIT, API_DEFAULT_CALLS_LIMIT
 from app.database import get_session
 from app.models import AlertEvent, APICallLog, FraudDecision
 
@@ -23,7 +24,7 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 
 @router.get("/calls", response_model=list[APICallLog])
-def get_calls(db: SessionDep, limit: int = 50) -> list[APICallLog]:
+def get_calls(db: SessionDep, limit: int = API_DEFAULT_CALLS_LIMIT) -> list[APICallLog]:
     """Return the most recent API call logs, newest first."""
     return list(
         db.exec(
@@ -36,23 +37,23 @@ def get_calls(db: SessionDep, limit: int = 50) -> list[APICallLog]:
 
 @router.get("/alerts", response_model=list[AlertEvent])
 def get_alerts(db: SessionDep) -> list[AlertEvent]:
-    """Return the 20 most recent alert events, newest first."""
+    """Return the most recent alert events, newest first."""
     return list(
         db.exec(
             select(AlertEvent)
             .order_by(AlertEvent.triggered_at.desc())  # type: ignore[arg-type]
-            .limit(20)
+            .limit(API_DEFAULT_LIST_LIMIT)
         ).all()
     )
 
 
 @router.get("/decisions", response_model=list[FraudDecision])
 def get_decisions(db: SessionDep) -> list[FraudDecision]:
-    """Return the 20 most recent fraud decisions, newest first."""
+    """Return the most recent fraud decisions, newest first."""
     return list(
         db.exec(
             select(FraudDecision)
             .order_by(FraudDecision.decided_at.desc())  # type: ignore[arg-type]
-            .limit(20)
+            .limit(API_DEFAULT_LIST_LIMIT)
         ).all()
     )

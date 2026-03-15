@@ -13,6 +13,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session, func, select
 
+from app.constants import API_DEFAULT_LIST_LIMIT
 from app.database import get_session
 from app.models import APICallLog
 
@@ -131,7 +132,7 @@ def live_calls(
         default=None,
         description=(
             "ISO-8601 UTC timestamp. Returns only calls newer than this value. "
-            "If omitted, returns the 20 most recent calls (bootstrap)."
+            "If omitted, returns the most recent calls (bootstrap)."
         ),
     ),
     app_id: Optional[str] = Query(default=None, description="Filter by app_id"),
@@ -164,8 +165,8 @@ def live_calls(
         query = query.where(APICallLog.app_id == app_id)
 
     if since is None:
-        # Bootstrap: return the 20 most recent, oldest-first
-        query = query.order_by(APICallLog.timestamp.desc()).limit(20)  # type: ignore[arg-type]
+        # Bootstrap: return the most recent calls, oldest-first
+        query = query.order_by(APICallLog.timestamp.desc()).limit(API_DEFAULT_LIST_LIMIT)  # type: ignore[arg-type]
         results = list(session.exec(query).all())
         results.reverse()
         return results
