@@ -7,7 +7,7 @@ Three apps are seeded — each maps to one of the three demo scenarios:
   - TaxEasy     → Scenario 3: social-engineering tax app / data harvester
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select
 
@@ -54,8 +54,9 @@ SEED_APPS: list[dict] = [
             "An AI-powered tax filing assistant that imports your financial data "
             "to auto-fill your return."
         ),
-        # Registered only ~48 hours before demo — triggers new-app risk signal
-        "registered_at": datetime(2026, 3, 12, 8, 0, 0, tzinfo=timezone.utc),
+        # Registered only ~48 hours ago — triggers new-app risk signal.
+        # Computed at runtime so the signal never drifts as calendar time passes.
+        "registered_at": datetime.now(tz=timezone.utc) - timedelta(hours=48),
         "trust_score": 1.5,
         "trust_level": TrustLevel.NEW,
         # Excessive permissions: requesting payment initiation + full data
