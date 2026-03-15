@@ -43,17 +43,6 @@ const SCENARIOS: Scenario[] = [
     httpMethod: 'POST',
     expectedVerdict: 'FLAG',
   },
-  {
-    id: 'social_engineering',
-    num: '03',
-    name: 'Social Engineering Tax App',
-    description:
-      'TaxEasy, registered 48 hours ago, requests excessive permissions and shows Benford deviation patterns consistent with data harvesting.',
-    app: 'TaxEasy',
-    endpoint: '/open-banking/accounts',
-    httpMethod: 'GET',
-    expectedVerdict: 'BLOCK',
-  },
 ]
 
 /* ─── Hardcoded profiler signal details per scenario ─── */
@@ -73,14 +62,6 @@ const PROFILER_DETAILS: Record<string, React.ReactNode> = {
       <p>Composite risk score: <span className="font-mono text-foreground">4.14 / 10</span></p>
     </>
   ),
-  social_engineering: (
-    <>
-      <p>New app: <span className="font-mono text-foreground">true</span> (48 h old)</p>
-      <p>Excessive permissions: <span className="font-mono text-foreground">6 scopes</span></p>
-      <p>Unusual endpoint ratio: <span className="font-mono text-foreground">33%</span></p>
-      <p>Composite risk score: <span className="font-mono text-foreground">5.03 / 10</span></p>
-    </>
-  ),
 }
 
 const MEMORY_DETAILS: Record<string, React.ReactNode> = {
@@ -94,12 +75,6 @@ const MEMORY_DETAILS: Record<string, React.ReactNode> = {
     <>
       <p>Structuring pattern previously observed</p>
       <p>Matched <span className="font-mono text-foreground">2</span> flagged payment apps with sub-threshold bursts</p>
-    </>
-  ),
-  social_engineering: (
-    <>
-      <p>New-app risk pattern detected</p>
-      <p>Matched <span className="font-mono text-foreground">4</span> recently registered apps with excessive permission requests</p>
     </>
   ),
 }
