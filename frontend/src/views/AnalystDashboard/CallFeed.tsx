@@ -19,9 +19,9 @@ function timeAgo(iso: string) {
 }
 
 const scenarioLabels: Record<string, string> = {
-  rogue_budgeting_app:   'Rogue app',
-  payment_anomaly:       'Anomaly',
-  social_engineering:    'Social eng.',
+  rogue_budgeting_app:   'Off-hours access',
+  payment_anomaly:       'Structuring',
+  social_engineering:    'New app risk',
 }
 
 export default function CallFeed({ calls, apps }: CallFeedProps) {

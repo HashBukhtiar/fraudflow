@@ -12,11 +12,14 @@ const severityConfig: Record<string, { border: string; dot: string; label: strin
 }
 
 function timeAgo(iso: string) {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  // Backend returns naive-UTC timestamps (no Z suffix) — force UTC interpretation
+  const utcIso = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+  const diff = Math.floor((Date.now() - new Date(utcIso).getTime()) / 1000)
+  if (diff < 0) return 'Just now'
   if (diff < 60) return 'Just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
-  return new Date(iso).toLocaleDateString()
+  return new Date(utcIso).toLocaleDateString()
 }
 
 export default function AlertsFeed({ alerts }: AlertsFeedProps) {
