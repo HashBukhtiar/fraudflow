@@ -128,6 +128,7 @@ class FraudDecision(SQLModel, table=True):
     confidence: float = Field(ge=0.0, le=1.0)
     explanation: str
     recommended_action: str = ""
+    memory_context_used: Optional[bool] = Field(default=None)
 
     app: Optional[AppProfile] = Relationship(back_populates="fraud_decisions")
     risk_signals: Optional[RiskSignals] = Relationship(

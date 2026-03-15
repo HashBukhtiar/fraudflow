@@ -12,12 +12,10 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import APICallLog, AppProfile, RiskSignals
-from app.profiler.scope_rules import evaluate_scope_signals
+from app.profiler.profiler import generate_risk_signals
+from app.constants import PROFILER_ROUTE_CALL_WINDOW, PIPELINE_RECENT_CALLS_LIMIT
 
 router = APIRouter(prefix="/api/profile", tags=["Profiler"])
-
-# How many recent calls to analyse for dynamic signals
-RECENT_CALL_WINDOW = 50
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +37,7 @@ def _get_recent_calls(app_id: str, session: Session) -> list[APICallLog]:
             select(APICallLog)
             .where(APICallLog.app_id == app_id)
             .order_by(APICallLog.timestamp.desc())  # type: ignore[arg-type]
-            .limit(RECENT_CALL_WINDOW)
+            .limit(PROFILER_ROUTE_CALL_WINDOW)
         ).all()
     )
 
@@ -54,37 +52,17 @@ def run_profile(
     session: Session = Depends(get_session),
 ) -> RiskSignals:
     """
-    Run the scope/permission profiler for an app and persist the result.
+    Run the full profiler for an app and persist the result.
 
-    Evaluates:
-      - Static: registered permissions vs category allowed set
-      - Dynamic: actual call history vs category allowed endpoints
-      - Age: whether the app was registered within the last 72 hours
+    Uses the same generate_risk_signals() function as the demo pipeline,
+    so composite_risk_score values are consistent across both paths.
 
     Returns the persisted RiskSignals record.
-    The `composite_risk_score` reflects scope signals only at this stage;
-    Benford and call-rate signals (Feature 5) will augment this later.
     """
     app = _get_app_or_404(app_id, session)
     recent_calls = _get_recent_calls(app_id, session)
 
-    signals_dict = evaluate_scope_signals(app, recent_calls)
-
-    # Map the evaluated signals onto the RiskSignals model
-    # (unexpected_scopes is extra detail not in the model — excluded)
-    risk = RiskSignals(
-        app_id=app_id,
-        excessive_permissions=signals_dict["excessive_permissions"],
-        permission_scope_count=signals_dict["permission_scope_count"],
-        unusual_endpoint_ratio=signals_dict["unusual_endpoint_ratio"],
-        app_age_hours=signals_dict["app_age_hours"],
-        # Benford / rate fields — defaults (0.0) until Feature 5
-        benford_score=signals_dict["benford_score"],
-        benford_deviation=signals_dict["benford_deviation"],
-        call_rate_per_minute=signals_dict["call_rate_per_minute"],
-        off_hours_ratio=signals_dict["off_hours_ratio"],
-        composite_risk_score=signals_dict["composite_risk_score"],
-    )
+    risk = generate_risk_signals(app, recent_calls)
 
     session.add(risk)
     session.commit()
@@ -129,7 +107,7 @@ def get_latest_profile(
 @router.get("/{app_id}/history", response_model=list[RiskSignals])
 def get_profile_history(
     app_id: str,
-    limit: int = 20,
+    limit: int = PIPELINE_RECENT_CALLS_LIMIT,
     session: Session = Depends(get_session),
 ) -> list[RiskSignals]:
     """

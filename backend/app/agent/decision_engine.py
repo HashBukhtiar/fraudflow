@@ -30,6 +30,15 @@ from ..models import (
     RiskSignals,
     Verdict,
 )
+from ..constants import (
+    AI_MODEL,
+    AI_MAX_TOKENS,
+    FALLBACK_CONFIDENCE,
+    NEW_APP_AGE_HOURS,
+    MEMORY_BENFORD_QUERY_THRESHOLD,
+    SCORE_BLOCK_THRESHOLD,
+    SCORE_FLAG_MIN,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,24 +46,24 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_MODEL      = "claude-haiku-4-5-20251001"
-_MAX_TOKENS = 512
+_MODEL      = AI_MODEL
+_MAX_TOKENS = AI_MAX_TOKENS
 
 _SYSTEM_PROMPT = (
     "You are a bank fraud analyst reviewing third-party fintech app behavior in "
     "Canada's Open Banking ecosystem. Be concise and precise. "
     "Respond only in JSON with no preamble or markdown.\n\n"
     "Verdict decision rules (apply in order — first match wins):\n"
-    "  1. If the user prompt contains a MANDATORY VERDICT line, you MUST use that verdict exactly.\n"
-    "  2. BLOCK  — composite_risk_score >= 6.0\n"
-    "  3. FLAG   — composite_risk_score 3.5–5.9\n"
-    "  4. APPROVE — composite_risk_score < 3.5\n"
-    "The MANDATORY VERDICT directive overrides your own judgment. You must comply."
+    f"  1. BLOCK  — composite_risk_score >= {SCORE_BLOCK_THRESHOLD}\n"
+    f"  2. FLAG   — composite_risk_score >= {SCORE_FLAG_MIN} and < {SCORE_BLOCK_THRESHOLD}\n"
+    f"  3. ALLOW  — composite_risk_score < {SCORE_FLAG_MIN}\n\n"
+    "Use your judgment as a fraud analyst. Consider the full context — risk signals, "
+    "memory of past incidents, app category, and permission scope — not just the score."
 )
 
 # Fallback values used when the API call or JSON parse fails
 _FALLBACK_VERDICT      = Verdict.FLAG
-_FALLBACK_CONFIDENCE   = 0.5
+_FALLBACK_CONFIDENCE   = FALLBACK_CONFIDENCE
 _FALLBACK_EXPLANATION  = "Decision engine parse error — manual review required."
 _FALLBACK_ACTION       = "flag_for_review"
 
@@ -96,9 +105,9 @@ def _get_client() -> anthropic.Anthropic:
 # ---------------------------------------------------------------------------
 
 def _signals_summary(signals: RiskSignals) -> str:
-    new_flag      = " ← NEW APP"   if signals.app_age_hours < 72    else ""
-    perm_flag     = " ← EXCESSIVE" if signals.excessive_permissions   else ""
-    benford_flag  = " ← ANOMALOUS" if signals.benford_score > 0.5    else ""
+    new_flag      = " ← NEW APP"   if signals.app_age_hours < NEW_APP_AGE_HOURS              else ""
+    perm_flag     = " ← EXCESSIVE" if signals.excessive_permissions                           else ""
+    benford_flag  = " ← ANOMALOUS" if signals.benford_score > MEMORY_BENFORD_QUERY_THRESHOLD  else ""
 
     lines = [
         f"  call_rate_per_minute   : {signals.call_rate_per_minute} calls/min",
@@ -112,43 +121,11 @@ def _signals_summary(signals: RiskSignals) -> str:
     return "\n".join(lines)
 
 
-def _mandatory_verdict(app: AppProfile, signals: RiskSignals) -> str | None:
-    """Return a BLOCK/FLAG override directive string if critical conditions are met,
-    or None if the score-based rules should decide.
-
-    These are hard rules that Claude must not override with its own reasoning.
-    """
-    # Critical BLOCK conditions — any one is sufficient
-    is_new_app = signals.app_age_hours < 72
-
-    # New app requesting payment scope outside a payments category
-    if is_new_app and signals.unusual_endpoint_ratio > 0 and signals.excessive_permissions:
-        return (
-            "MANDATORY VERDICT: BLOCK\n"
-            "Reason: New app (< 72 hours old) with excessive permissions is hitting payment "
-            "endpoints outside its declared category scope. This combination is a critical "
-            "fraud indicator — revoke access immediately."
-        )
-
-    # Any non-payment category app with 100% payment endpoint calls overnight
-    if signals.unusual_endpoint_ratio >= 1.0 and signals.off_hours_ratio >= 1.0:
-        return (
-            "MANDATORY VERDICT: BLOCK\n"
-            "Reason: 100% of calls are to payment endpoints (category mismatch) AND 100% "
-            "are overnight. This is an unambiguous token abuse or exfiltration pattern."
-        )
-
-    return None
-
-
 def _build_user_prompt(
     app: AppProfile,
     signals: RiskSignals,
     memory_context: str,
 ) -> str:
-    override = _mandatory_verdict(app, signals)
-    override_block = f"\n{override}\n" if override else ""
-
     return f"""App under review:
   Name          : {app.name}
   Category      : {app.category.value}
@@ -161,10 +138,10 @@ Risk signals:
 
 Memory context (similar past incidents):
   {memory_context}
-{override_block}
+
 Return a JSON object with exactly these keys:
 {{
-  "verdict": "APPROVE" | "FLAG" | "BLOCK",
+  "verdict": "ALLOW" | "FLAG" | "BLOCK",
   "confidence": <float 0.0–1.0>,
   "explanation": "<1-2 sentences written like a fraud analyst>",
   "recommended_action": "allow" | "log" | "flag_for_review" | "throttle" | "revoke_token"
@@ -254,22 +231,13 @@ def make_decision(
     db.commit()
     db.refresh(signals)
 
-    # 2. Check for mandatory verdict override (Python-level — not subject to LLM drift)
-    forced_verdict: Verdict | None = None
-    forced_action: str | None = None
-    override_directive = _mandatory_verdict(app, signals)
-    if override_directive is not None:
-        forced_verdict = Verdict.BLOCK
-        forced_action  = "revoke_token"
-
-    # 3. Build prompt (includes the override directive text if applicable)
+    # 2. Build prompt and call Claude — all verdicts flow through the model
     user_prompt = _build_user_prompt(app, signals, memory_context)
 
-    # 4 + 5. Call Claude and parse response
     verdict     = _FALLBACK_VERDICT
     confidence  = _FALLBACK_CONFIDENCE
     explanation = _FALLBACK_EXPLANATION
-    action      = _FALLBACK_ACTION
+    action: str = _FALLBACK_ACTION
 
     try:
         response = _get_client().messages.create(
@@ -293,16 +261,7 @@ def make_decision(
         # Catches auth errors (missing API key), network issues, etc.
         logger.error("Decision engine error (%s): %s", type(exc).__name__, exc)
 
-    # 6. Apply Python-level override — locks verdict/action regardless of Claude output
-    if forced_verdict is not None:
-        verdict = forced_verdict
-        action  = forced_action  # type: ignore[assignment]
-        logger.info(
-            "pipeline [%s]: mandatory override applied → %s / %s",
-            app.app_id, verdict.value, action,
-        )
-
-    # 5 + 6. Build and save FraudDecision linked to the saved RiskSignals
+    # 3. Build and save FraudDecision linked to the saved RiskSignals
     decision = FraudDecision(
         app_id=app.app_id,
         risk_signals_id=signals.id,
@@ -310,154 +269,21 @@ def make_decision(
         confidence=confidence,
         explanation=explanation,
         recommended_action=action,
+        memory_context_used=bool(memory_context and memory_context.strip()),
     )
     db.add(decision)
     db.commit()
     db.refresh(decision)
 
-    # 7. Create AlertEvent for FLAG or BLOCK
+    # 4. Create AlertEvent for FLAG or BLOCK
     alert = _make_alert(decision, app)
     if alert is not None:
         db.add(alert)
         db.commit()
 
-    # 8. Return
+    logger.info(
+        "pipeline [%s]: verdict=%s confidence=%.0f%%",
+        app.app_id, decision.verdict.value, decision.confidence * 100,
+    )
+
     return decision
-
-
-# ---------------------------------------------------------------------------
-# Smoke-test — python -m backend.app.agent.decision_engine
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    import sys
-    from datetime import timedelta
-
-    from sqlmodel import SQLModel, create_engine
-
-    from ..models import APICallLog, AppCategory, AppProfile
-    from ..profiler.profiler import generate_risk_signals
-    from ..memory.memory_store import query_similar_behavior, store_incident
-
-    logging.basicConfig(level=logging.WARNING, stream=sys.stdout)
-
-    # --- In-memory SQLite DB ------------------------------------------------
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    SQLModel.metadata.create_all(engine)
-
-    now = datetime.now(timezone.utc)
-
-    # --- Seed apps ----------------------------------------------------------
-
-    apps = [
-        AppProfile(
-            app_id="budgetbuddy",
-            name="BudgetBuddy",
-            category=AppCategory.BUDGETING,
-            permissions="read:accounts,read:transactions",
-            registered_at=now - timedelta(days=180),
-            trust_score=0.85,
-            is_active=True,
-        ),
-        AppProfile(
-            app_id="quickpay",
-            name="QuickPay",
-            category=AppCategory.PAYMENTS,
-            permissions="read:accounts,write:payments,read:transactions,read:balance,admin",
-            registered_at=now - timedelta(days=30),
-            trust_score=0.40,
-            is_active=True,
-        ),
-        AppProfile(
-            app_id="taxeasy",
-            name="TaxEasy",
-            category=AppCategory.TAX,
-            permissions="read:accounts,read:transactions,write:payments",
-            registered_at=now - timedelta(days=2),
-            trust_score=0.10,
-            is_active=True,
-        ),
-    ]
-
-    # --- Mock call logs per scenario ----------------------------------------
-
-    def _call(
-        app_id: str,
-        endpoint: str,
-        hour: int = 14,
-        amount: float | None = None,
-        minutes_ago: int = 1,
-    ) -> APICallLog:
-        ts = now.replace(hour=hour, minute=0, second=0, microsecond=0) - timedelta(
-            minutes=minutes_ago
-        )
-        return APICallLog(
-            app_id=app_id,
-            timestamp=ts,
-            endpoint=endpoint,
-            http_method="GET",
-            status_code=200,
-            response_time_ms=110.0,
-            amount=amount,
-        )
-
-    scenario_calls = {
-        "budgetbuddy": (
-            [_call("budgetbuddy", "/open-banking/accounts",     hour=10, minutes_ago=i) for i in range(1, 6)]
-            + [_call("budgetbuddy", "/open-banking/transactions", hour=11, amount=float(i * 31)) for i in range(1, 6)]
-        ),
-        "quickpay": (
-            # high frequency overnight burst
-            [_call("quickpay", "/open-banking/payments", hour=2, amount=999.99 * i, minutes_ago=i) for i in range(1, 13)]
-        ),
-        "taxeasy": (
-            # new app + scope mismatch + overnight
-            [_call("taxeasy", "/open-banking/payments",     hour=3, amount=float(i * 100), minutes_ago=i) for i in range(1, 5)]
-            + [_call("taxeasy", "/open-banking/transactions", hour=14, amount=float(i * 57)) for i in range(1, 5)]
-        ),
-    }
-
-    # --- Persist AppProfiles so FK constraints are satisfied ----------------
-    # expire_on_commit=False keeps the in-memory objects usable after commit
-    with Session(engine, expire_on_commit=False) as db:
-        for app in apps:
-            db.add(app)
-        db.commit()
-
-    # --- Run full pipeline for each app -------------------------------------
-
-    print(f"\n{'=' * 65}")
-    print("  FraudFlow Decision Engine — full pipeline smoke-test")
-    print(f"{'=' * 65}")
-
-    for app in apps:
-        calls   = scenario_calls[app.app_id]
-        signals = generate_risk_signals(app, calls)
-
-        memory_context = query_similar_behavior(app, signals)
-
-        with Session(engine, expire_on_commit=False) as db:
-            # Re-attach app to this session so FK lookups work
-            db.merge(app)
-            db.commit()
-            decision = make_decision(app, signals, memory_context, db)
-
-        # Store incident so subsequent apps can query it
-        store_incident(decision, app)
-
-        risk_label = (
-            "LOW"    if signals.composite_risk_score < 3 else
-            "MEDIUM" if signals.composite_risk_score < 6 else
-            "HIGH"
-        )
-
-        print(f"\n  App               : {app.name} ({app.category.value})")
-        print(f"  Composite risk    : {signals.composite_risk_score:.2f} / 10  [{risk_label}]")
-        print(f"  Memory context    : {memory_context[:80]}{'...' if len(memory_context) > 80 else ''}")
-        print(f"  ── Decision ──────────────────────────────────────────")
-        print(f"  Verdict           : {decision.verdict.value}")
-        print(f"  Confidence        : {decision.confidence:.0%}")
-        print(f"  Explanation       : {decision.explanation}")
-        print(f"  Recommended action: {decision.recommended_action}")
-        print(f"  risk_signals_id   : {decision.risk_signals_id}")
-        print(f"  decision id       : {decision.id}")
