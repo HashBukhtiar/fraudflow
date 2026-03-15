@@ -17,10 +17,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import anthropic
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from ..models import (
     AlertEvent,
@@ -53,12 +53,13 @@ _SYSTEM_PROMPT = (
     "You are a bank fraud analyst reviewing third-party fintech app behavior in "
     "Canada's Open Banking ecosystem. Be concise and precise. "
     "Respond only in JSON with no preamble or markdown.\n\n"
-    "Verdict decision rules (apply in order — first match wins):\n"
+    "Verdict decision rules — YOU MUST follow these strictly based on composite_risk_score:\n"
     f"  1. BLOCK  — composite_risk_score >= {SCORE_BLOCK_THRESHOLD}\n"
     f"  2. FLAG   — composite_risk_score >= {SCORE_FLAG_MIN} and < {SCORE_BLOCK_THRESHOLD}\n"
     f"  3. ALLOW  — composite_risk_score < {SCORE_FLAG_MIN}\n\n"
-    "Use your judgment as a fraud analyst. Consider the full context — risk signals, "
-    "memory of past incidents, app category, and permission scope — not just the score."
+    "IMPORTANT: The verdict MUST match the score range above. Never override these thresholds. "
+    "Use the context (app profile, memory, signals) only to write your explanation and "
+    "choose the recommended_action — NOT to change the verdict."
 )
 
 # Fallback values used when the API call or JSON parse fails
@@ -275,11 +276,20 @@ def make_decision(
     db.commit()
     db.refresh(decision)
 
-    # 4. Create AlertEvent for FLAG or BLOCK
+    # 4. Create AlertEvent for FLAG or BLOCK — deduplicate within 60s window
     alert = _make_alert(decision, app)
     if alert is not None:
-        db.add(alert)
-        db.commit()
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=60)
+        recent = db.exec(
+            select(AlertEvent)
+            .where(AlertEvent.app_id == app.app_id)
+            .where(AlertEvent.verdict == decision.verdict)
+            .where(AlertEvent.triggered_at >= cutoff)  # type: ignore[arg-type]
+            .limit(1)
+        ).first()
+        if recent is None:
+            db.add(alert)
+            db.commit()
 
     logger.info(
         "pipeline [%s]: verdict=%s confidence=%.0f%%",

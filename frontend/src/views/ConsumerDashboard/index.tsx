@@ -101,6 +101,12 @@ export default function ConsumerDashboard() {
   useEffect(() => {
     setLoading(true)
     refresh().finally(() => setLoading(false))
+
+    // Poll for new alerts and app status every 4s
+    const interval = setInterval(() => {
+      if (!document.hidden) refresh()
+    }, 4000)
+    return () => clearInterval(interval)
   }, [])
 
   const handleConnect = async (appId: string) => {

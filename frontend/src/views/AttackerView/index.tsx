@@ -29,9 +29,10 @@ export default function AttackerView() {
   const [resetting, setResetting] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Poll app status every 1.5s
+  // Poll app status every 2s, but only while the tab is visible
   useEffect(() => {
     const poll = async () => {
+      if (document.hidden) return
       try {
         const s = await getAppStatus(APP_ID)
         setStatus(s)
@@ -40,7 +41,7 @@ export default function AttackerView() {
       }
     }
     poll()
-    pollRef.current = setInterval(poll, 1500)
+    pollRef.current = setInterval(poll, 2000)
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
@@ -78,7 +79,7 @@ export default function AttackerView() {
       fire: () =>
         callOpenBanking('/open-banking/payments', {
           method: 'POST',
-          body: { amount: 150, app_id: APP_ID },
+          body: { to_account: 'acc_001', amount: 150, description: 'Tax return filing fee' },
           appId: APP_ID,
         }),
     },
@@ -101,7 +102,7 @@ export default function AttackerView() {
       fire: () =>
         callOpenBanking('/open-banking/payments', {
           method: 'POST',
-          body: { amount: 9800, app_id: APP_ID },
+          body: { to_account: 'acc_001', amount: 9800, description: 'Tax refund deposit' },
           appId: APP_ID,
         }),
     },
@@ -124,7 +125,8 @@ export default function AttackerView() {
       setActionStates((s) => ({ ...s, [action.id]: 'loading' }))
       try {
         await action.fire()
-        // Re-poll status immediately after action
+        // Give the background pipeline time to evaluate before polling
+        await sleep(3000)
         const s = await getAppStatus(APP_ID)
         setStatus(s)
         const verdict = s.last_verdict ?? 'ALLOW'
