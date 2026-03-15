@@ -171,9 +171,6 @@ export default function DemoScenarios() {
         return next
       })
 
-      // Kick off API call immediately
-      const apiPromise = triggerScenario(id)
-
       // Animate steps 0–3 with delays (these don't need API data)
       const delay = (ms: number) =>
         new Promise<void>((resolve) => {
@@ -181,38 +178,41 @@ export default function DemoScenarios() {
           timersRef.current.push(t)
         })
 
-      // Step 0: Request
-      advanceStep(id, 0, 'active')
-      await delay(STEP_DELAY)
-      advanceStep(id, 0, 'done', (
-        <>
-          <p><span className="font-mono text-foreground">{scenario.app}</span> → <span className="font-mono text-foreground">{scenario.httpMethod} {scenario.endpoint}</span></p>
-        </>
-      ))
-
-      // Step 1: Gateway
-      advanceStep(id, 1, 'active')
-      await delay(STEP_DELAY)
-      advanceStep(id, 1, 'done', (
-        <>
-          <p>Gateway intercepted request</p>
-          <p>Method: <span className="font-mono text-foreground">{scenario.httpMethod}</span></p>
-        </>
-      ))
-
-      // Step 2: Profiler
-      advanceStep(id, 2, 'active')
-      await delay(STEP_DELAY)
-      advanceStep(id, 2, 'done', PROFILER_DETAILS[id])
-
-      // Step 3: Memory
-      advanceStep(id, 3, 'active')
-      await delay(STEP_DELAY)
-      advanceStep(id, 3, 'done', MEMORY_DETAILS[id])
-
-      // Step 4: AI — wait for actual API result
-      advanceStep(id, 4, 'active')
       try {
+        // Kick off API call immediately (runs in parallel with animation)
+        const apiPromise = triggerScenario(id)
+
+        // Step 0: Request
+        advanceStep(id, 0, 'active')
+        await delay(STEP_DELAY)
+        advanceStep(id, 0, 'done', (
+          <>
+            <p><span className="font-mono text-foreground">{scenario.app}</span> → <span className="font-mono text-foreground">{scenario.httpMethod} {scenario.endpoint}</span></p>
+          </>
+        ))
+
+        // Step 1: Gateway
+        advanceStep(id, 1, 'active')
+        await delay(STEP_DELAY)
+        advanceStep(id, 1, 'done', (
+          <>
+            <p>Gateway intercepted request</p>
+            <p>Method: <span className="font-mono text-foreground">{scenario.httpMethod}</span></p>
+          </>
+        ))
+
+        // Step 2: Profiler
+        advanceStep(id, 2, 'active')
+        await delay(STEP_DELAY)
+        advanceStep(id, 2, 'done', PROFILER_DETAILS[id])
+
+        // Step 3: Memory
+        advanceStep(id, 3, 'active')
+        await delay(STEP_DELAY)
+        advanceStep(id, 3, 'done', MEMORY_DETAILS[id])
+
+        // Step 4: AI — wait for actual API result
+        advanceStep(id, 4, 'active')
         const data = await apiPromise
 
         await delay(STEP_DELAY)

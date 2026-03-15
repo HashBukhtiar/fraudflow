@@ -33,7 +33,7 @@ export default function DecisionDrawer({ decision, apps, open, onClose }: Decisi
             <SheetHeader className="mb-6">
               <SheetTitle className="text-base">Decision Detail</SheetTitle>
             </SheetHeader>
-            <div className="space-y-5 text-sm">
+            <div className="space-y-5 text-sm px-4">
               {/* Verdict */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span

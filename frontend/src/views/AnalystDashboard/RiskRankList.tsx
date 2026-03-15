@@ -7,7 +7,8 @@ interface RiskRankListProps {
 }
 
 export default function RiskRankList({ apps }: RiskRankListProps) {
-  const sorted = [...apps].sort((a, b) => (a as any).trust_score - (b as any).trust_score)
+  // trust_score is 0–10; lower score = higher risk, so sort ascending
+  const sorted = [...apps].sort((a, b) => a.trust_score - b.trust_score)
 
   return (
     <Card>
@@ -16,26 +17,26 @@ export default function RiskRankList({ apps }: RiskRankListProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {sorted.map((app) => {
-          const a = app as any
-          const pct = Math.round(a.trust_score * 100)
+          // trust_score is 0–10; convert to percentage for display
+          const pct = Math.round(app.trust_score * 10)
           const barColor =
-            a.trust_score >= 0.7 ? 'bg-primary' : a.trust_score >= 0.4 ? 'bg-amber-500' : 'bg-destructive'
+            app.trust_score >= 7 ? 'bg-primary' : app.trust_score >= 4 ? 'bg-amber-500' : 'bg-destructive'
           const textColor =
-            a.trust_score >= 0.7
+            app.trust_score >= 7
               ? 'text-primary'
-              : a.trust_score >= 0.4
+              : app.trust_score >= 4
                 ? 'text-amber-600'
                 : 'text-destructive'
 
           return (
-            <div key={a.id} className="space-y-1.5">
+            <div key={app.id} className="space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-medium">{a.name}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{a.category}</p>
+                  <p className="text-sm font-medium">{app.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{app.category}</p>
                 </div>
                 <span className={cn('text-sm font-semibold tabular-nums font-mono', textColor)}>
-                  {pct}%
+                  {app.trust_score.toFixed(1)}
                 </span>
               </div>
               <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
