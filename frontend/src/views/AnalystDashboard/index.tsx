@@ -121,7 +121,7 @@ export default function AnalystDashboard() {
   const [decisions, setDecisions] = useState<FraudDecision[]>(MOCK_DECISIONS)
   const [selected, setSelected] = useState<FraudDecision | null>(null)
 
-  useEffect(() => {
+  const refresh = () =>
     Promise.all([
       getApps(),
       getDecisions(),
@@ -132,9 +132,14 @@ export default function AnalystDashboard() {
         setDecisions(decisionsData)
         setCalls(callsData)
       })
-      .catch(() => {
-        // backend not running — fall back to mock data
-      })
+      .catch(() => {})
+
+  useEffect(() => {
+    refresh()
+    const interval = setInterval(() => {
+      if (!document.hidden) refresh()
+    }, 4000)
+    return () => clearInterval(interval)
   }, [])
 
   const blocked      = decisions.filter((d) => d.verdict === 'BLOCK').length
@@ -262,7 +267,7 @@ export default function AnalystDashboard() {
         {/* Feed + Risk */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <CallFeed calls={calls} apps={apps} />
+            <CallFeed calls={calls} apps={apps} decisions={decisions} />
           </div>
           <div>
             <RiskRankList apps={apps} />
