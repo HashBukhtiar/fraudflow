@@ -15,11 +15,23 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import AlertEvent, FraudDecision
+from app.models import AlertEvent, APICallLog, FraudDecision
 
 router = APIRouter(prefix="/api", tags=["Dashboard"])
 
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("/calls", response_model=list[APICallLog])
+def get_calls(db: SessionDep, limit: int = 50) -> list[APICallLog]:
+    """Return the most recent API call logs, newest first."""
+    return list(
+        db.exec(
+            select(APICallLog)
+            .order_by(APICallLog.timestamp.desc())  # type: ignore[arg-type]
+            .limit(limit)
+        ).all()
+    )
 
 
 @router.get("/alerts", response_model=list[AlertEvent])
