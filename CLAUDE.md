@@ -188,6 +188,169 @@ interface TimelineStep {
 - S2 QuickPay: off_hours=100%, benford=1.000 (structuring), composite=4.14/10
 - S3 TaxEasy: new_app=true, excessive_perms=6, unusual_endpoint=33%, composite=5.03/10
 
+Feature: FraudFlow Decision Timeline Visualization
+Goal
+When a demo scenario runs, show a visual pipeline of what happens to the request as it moves through the FraudFlow system.
+Instead of just seeing:
+BLOCKED
+Reason: suspicious permissions
+the user sees the entire decision process unfold step-by-step.
+
+What the Visualization Looks Like
+Think of it like a horizontal pipeline timeline.
+Example:
+Fintech App
+   ↓
+API Request Created
+   ↓
+FraudFlow Gateway
+   ↓
+Behavior Profiler
+   ↓
+Memory Lookup
+   ↓
+AI Decision Engine
+   ↓
+Final Action (ALLOW / FLAG / BLOCK)
+   ↓
+Bank API
+Each step lights up as the scenario runs.
+
+Example Demo Flow
+User clicks:
+Run Scenario: Rogue Budgeting App
+Then the timeline animates.
+Step 1
+Fintech app sends request
+UI shows:
+Budgeting App → GET /transactions
+
+Step 2
+FraudFlow intercepts request
+Card shows:
+Gateway intercepted request
+Timestamp: 03:12 AM
+
+Step 3
+Profiler generates signals
+UI shows:
+Scope mismatch detected
+Overnight access pattern
+Risk score: 72
+
+Step 4
+Memory lookup
+UI shows:
+Similar pattern found
+Matched 3 suspicious fintech apps
+
+Step 5
+AI reasoning
+Show the short explanation:
+AI Analysis:
+This budgeting app is requesting endpoints inconsistent with its declared permissions.
+Behavior resembles known data-harvesting patterns.
+
+Step 6
+Final decision
+The final node lights up:
+BLOCKED
+Token revoked
+Trust score updated
+
+Visual Structure (Frontend)
+Component layout:
+ScenarioPanel
+   |
+   |-- Run Scenario Button
+   |
+   |-- DecisionTimeline
+           |
+           |-- TimelineStep (Fintech Request)
+           |-- TimelineStep (Gateway Intercept)
+           |-- TimelineStep (Profiler Signals)
+           |-- TimelineStep (Memory Context)
+           |-- TimelineStep (AI Reasoning)
+           |-- TimelineStep (Final Decision)
+
+Simple Timeline State Model
+Frontend keeps a list of steps.
+Example:
+[
+ { step: "request", status: "pending" },
+ { step: "gateway", status: "pending" },
+ { step: "profiler", status: "pending" },
+ { step: "memory", status: "pending" },
+ { step: "ai", status: "pending" },
+ { step: "decision", status: "pending" }
+]
+When the scenario runs, update them sequentially.
+Example:
+request → active → done
+gateway → active → done
+profiler → active → done
+...
+
+How to Trigger It
+When the scenario endpoint is called:
+POST /api/demo/trigger/rogue_app
+Frontend does:
+start timeline animation
+
+
+fetch scenario result
+
+
+update each stage with real data
+
+
+You can simulate the steps with small delays so it feels like processing.
+Example:
+setTimeout(step1, 500ms)
+setTimeout(step2, 1000ms)
+setTimeout(step3, 1500ms)
+
+Technologies (Easy to Build)
+For the frontend:
+React + Tailwind components
+Optional animation libraries:
+Framer Motion (best option)
+
+
+React Flow (if you want node graphs)
+
+
+Headless UI transitions
+
+
+But honestly:
+Framer Motion timeline cards are perfect.
+
+Example UI Layout
+[Run Scenario]
+
+────────────────────────────────
+
+Budgeting App
+     ↓
+Gateway Intercept
+     ↓
+Behavior Profiler
+     ↓
+Memory Check
+     ↓
+AI Analysis
+     ↓
+BLOCKED ❌
+Each block expands when active.
+
+
+
+
+
+
+
+
 ## Out of Scope
 Do not build first:
 - LangGraph
