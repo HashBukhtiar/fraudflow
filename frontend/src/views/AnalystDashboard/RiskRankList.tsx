@@ -7,7 +7,7 @@ interface RiskRankListProps {
 }
 
 export default function RiskRankList({ apps }: RiskRankListProps) {
-  // trust_score is 0–10; lower score = higher risk, so sort ascending
+  // Sort by risk descending (risk = 10 - trust_score, so lowest trust first)
   const sorted = [...apps].sort((a, b) => a.trust_score - b.trust_score)
 
   return (
@@ -17,16 +17,16 @@ export default function RiskRankList({ apps }: RiskRankListProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {sorted.map((app) => {
-          // trust_score is 0–10; convert to percentage for display
-          const pct = Math.round(app.trust_score * 10)
+          const riskScore = 10 - app.trust_score
+          const pct = Math.round(riskScore * 10)
           const barColor =
-            app.trust_score >= 7 ? 'bg-primary' : app.trust_score >= 4 ? 'bg-amber-500' : 'bg-destructive'
+            riskScore >= 7 ? 'bg-destructive' : riskScore >= 4 ? 'bg-amber-500' : 'bg-primary'
           const textColor =
-            app.trust_score >= 7
-              ? 'text-primary'
-              : app.trust_score >= 4
+            riskScore >= 7
+              ? 'text-destructive'
+              : riskScore >= 4
                 ? 'text-amber-600'
-                : 'text-destructive'
+                : 'text-primary'
 
           return (
             <div key={app.id} className="space-y-1.5">
@@ -36,7 +36,7 @@ export default function RiskRankList({ apps }: RiskRankListProps) {
                   <p className="text-xs text-muted-foreground capitalize">{app.category}</p>
                 </div>
                 <span className={cn('text-sm font-semibold tabular-nums font-mono', textColor)}>
-                  {app.trust_score.toFixed(1)}
+                  {riskScore.toFixed(1)}
                 </span>
               </div>
               <div className="h-1 w-full rounded-full bg-muted overflow-hidden">
