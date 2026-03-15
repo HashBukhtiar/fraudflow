@@ -39,7 +39,7 @@ function trustLabel(norm: number) {
   return                        { label: 'High risk',          dot: 'bg-destructive', text: 'text-destructive' }
 }
 
-export default function AppCard({ app }: { app: AppProfile }) {
+export default function AppCard({ app, onRevoke }: { app: AppProfile; onRevoke?: () => void }) {
   const norm = app.trust_score / 10
   const trust = trustLabel(norm)
   const initials = app.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()
@@ -111,9 +111,14 @@ export default function AppCard({ app }: { app: AppProfile }) {
           <p className="text-xs text-muted-foreground">
             Connected {new Date(registeredAt).toLocaleDateString()}
           </p>
-          <button className="text-xs text-muted-foreground hover:text-destructive transition-colors">
-            Revoke
-          </button>
+          {onRevoke && (
+            <button
+              onClick={onRevoke}
+              className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            >
+              Revoke
+            </button>
+          )}
         </div>
       </CardContent>
     </Card>

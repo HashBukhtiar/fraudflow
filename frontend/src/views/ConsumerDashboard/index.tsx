@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getApps, getAlerts, connectApp } from '@/api/client'
+import { getApps, getAlerts, connectApp, revokeApp } from '@/api/client'
 import type { AppProfile, AlertEvent } from '@/api/types'
 import AppCard from './AppCard'
 import AlertsFeed from './AlertsFeed'
@@ -84,6 +84,7 @@ export default function ConsumerDashboard() {
   const [alerts, setAlerts] = useState<AlertEvent[]>(MOCK_ALERTS)
   const [loading, setLoading] = useState(false)
   const [connecting, setConnecting] = useState<string | null>(null)
+  const [revoking, setRevoking]     = useState<string | null>(null)
 
   const refresh = () =>
     Promise.all([getApps(), getAlerts()])
@@ -107,6 +108,17 @@ export default function ConsumerDashboard() {
       // ignore
     }
     setConnecting(null)
+  }
+
+  const handleRevoke = async (appId: string) => {
+    setRevoking(appId)
+    try {
+      await revokeApp(appId)
+      await refresh()
+    } catch {
+      // ignore
+    }
+    setRevoking(null)
   }
 
   const connectedApps  = apps.filter((a) => a.is_active)
@@ -185,7 +197,11 @@ export default function ConsumerDashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {connectedApps.map((app) => (
-                <AppCard key={app.app_id} app={app} />
+                <AppCard
+                  key={app.app_id}
+                  app={app}
+                  onRevoke={revoking === app.app_id ? undefined : () => handleRevoke(app.app_id)}
+                />
               ))}
             </div>
           )}

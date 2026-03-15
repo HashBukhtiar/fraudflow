@@ -37,6 +37,9 @@ export interface AppStatus {
 export const connectApp = (appId: string) =>
   api.post<AppProfile>(`/api/apps/${appId}/connect`).then((r) => r.data)
 
+export const revokeApp = (appId: string) =>
+  api.post<AppProfile>(`/api/apps/${appId}/revoke`).then((r) => r.data)
+
 export const getAppStatus = (appId: string) =>
   api.get<AppStatus>(`/api/apps/${appId}/status`).then((r) => r.data)
 

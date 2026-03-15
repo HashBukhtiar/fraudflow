@@ -89,6 +89,23 @@ def get_app_calls(
     return list(calls)
 
 
+@router.post("/{app_id}/revoke", response_model=AppProfile)
+def revoke_app(app_id: str, session: SessionDep) -> AppProfile:
+    """Deactivate an app — consumer revokes access."""
+    app = session.exec(
+        select(AppProfile).where(AppProfile.app_id == app_id)
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail=f"App '{app_id}' not found")
+
+    app.is_active = False
+    session.add(app)
+    session.commit()
+    session.refresh(app)
+    return app
+
+
 @router.post("/{app_id}/connect", response_model=AppProfile)
 def connect_app(app_id: str, session: SessionDep) -> AppProfile:
     """Activate an inactive app — used by the consumer to connect a new third-party app."""
