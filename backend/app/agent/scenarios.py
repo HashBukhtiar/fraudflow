@@ -68,9 +68,7 @@ def scenario_rogue_budgeting_app(db: Session) -> FraudDecision:
     app = _load_app("BudgetBuddy", db)
     now = datetime.now(timezone.utc)
 
-    # 15 calls between 02:00 and 04:00 today — spread evenly over 2-hour window
-    today_2am = now.replace(hour=2, minute=0, second=0, microsecond=0)
-
+    # 15 calls in the recent past — spread over the last 2 hours
     # Amounts all starting with 5 → stark Benford deviation
     amounts = [
         540.0, 521.0, 567.0, 589.0, 512.0,
@@ -83,10 +81,13 @@ def scenario_rogue_budgeting_app(db: Session) -> FraudDecision:
             app_id=app.app_id,
             endpoint="/open-banking/payments",
             http_method="POST",
-            timestamp=today_2am + timedelta(minutes=i * 8),
-            status_code=200,
+            timestamp=now - timedelta(minutes=(15 - i) * 8),
+            time_of_day_hour=3,  # mark as off-hours for profiler
+            status_code=403,
             response_time_ms=140.0,
             amount=amounts[i],
+            flagged=True,
+            scenario_tag="rogue_budgeting_app",
         )
         for i in range(15)
     ]
@@ -119,8 +120,7 @@ def scenario_payment_anomaly(db: Session) -> FraudDecision:
     app = _load_app("QuickPay", db)
     now = datetime.now(timezone.utc)
 
-    # All 8 calls at 2am within a 3-minute window — overnight structuring burst
-    today_2am = now.replace(hour=2, minute=0, second=0, microsecond=0)
+    # 8 calls in a rapid burst within the last 3 minutes
     amounts = [9800.0, 9750.0, 9900.0, 9850.0, 9820.0, 9780.0, 9920.0, 9870.0]
 
     logs = [
@@ -128,10 +128,13 @@ def scenario_payment_anomaly(db: Session) -> FraudDecision:
             app_id=app.app_id,
             endpoint="/open-banking/payments",
             http_method="POST",
-            timestamp=today_2am + timedelta(seconds=i * 20),
+            timestamp=now - timedelta(seconds=(8 - i) * 20),
+            time_of_day_hour=2,  # mark as off-hours for profiler
             status_code=200,
             response_time_ms=95.0,
             amount=amounts[i],
+            flagged=True,
+            scenario_tag="payment_anomaly",
         )
         for i in range(8)
     ]
@@ -166,20 +169,20 @@ def scenario_social_engineering(db: Session) -> FraudDecision:
     now = datetime.now(timezone.utc)
 
     # Mix of endpoints — 4 payments (scope mismatch), 4 transactions, 4 accounts
-    # Spread over last 10 minutes; some early-morning for off_hours signal
+    # All spread over last 12 minutes
     endpoint_pattern = [
-        ("/open-banking/payments",     "POST", 3,  450.0),
-        ("/open-banking/transactions", "GET",  2,  None),
-        ("/open-banking/payments",     "POST", 1,  880.0),
-        ("/open-banking/accounts",     "GET",  0,  None),
-        ("/open-banking/payments",     "POST", 4,  330.0),
-        ("/open-banking/accounts",     "GET",  5,  None),
+        ("/open-banking/payments",     "POST", 12, 450.0),
+        ("/open-banking/transactions", "GET",  11, None),
+        ("/open-banking/payments",     "POST", 10, 880.0),
+        ("/open-banking/accounts",     "GET",  9,  None),
+        ("/open-banking/payments",     "POST", 8,  330.0),
+        ("/open-banking/accounts",     "GET",  7,  None),
         ("/open-banking/transactions", "GET",  6,  None),
-        ("/open-banking/payments",     "POST", 7,  720.0),
-        ("/open-banking/accounts",     "GET",  8,  None),
-        ("/open-banking/transactions", "GET",  9,  None),
-        ("/open-banking/accounts",     "GET",  10, None),
-        ("/open-banking/transactions", "GET",  10, None),
+        ("/open-banking/payments",     "POST", 5,  720.0),
+        ("/open-banking/accounts",     "GET",  4,  None),
+        ("/open-banking/transactions", "GET",  3,  None),
+        ("/open-banking/accounts",     "GET",  2,  None),
+        ("/open-banking/transactions", "GET",  1,  None),
     ]
 
     logs = [
@@ -187,15 +190,13 @@ def scenario_social_engineering(db: Session) -> FraudDecision:
             app_id=app.app_id,
             endpoint=ep,
             http_method=method,
-            # Interleave: some calls at 3am (off_hours), rest within last 10 min
-            timestamp=(
-                now.replace(hour=3, minute=offset, second=0, microsecond=0)
-                if offset < 5
-                else now - timedelta(minutes=offset)
-            ),
-            status_code=200,
+            timestamp=now - timedelta(minutes=offset),
+            time_of_day_hour=3,  # mark as off-hours for profiler
+            status_code=403 if ep == "/open-banking/payments" else 200,
             response_time_ms=165.0,
             amount=amount,
+            flagged=ep == "/open-banking/payments",
+            scenario_tag="social_engineering",
         )
         for ep, method, offset, amount in endpoint_pattern
     ]

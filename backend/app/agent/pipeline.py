@@ -11,7 +11,7 @@ import logging
 from sqlmodel import Session, select
 
 from ..database import engine
-from ..models import APICallLog, AppProfile, FraudDecision
+from ..models import APICallLog, AppProfile, FraudDecision, Verdict
 from ..profiler.profiler import generate_risk_signals
 from ..memory.memory_store import query_similar_behavior, store_incident
 from .decision_engine import make_decision
@@ -73,7 +73,20 @@ def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision
             app_id, decision.verdict.value, decision.confidence * 100,
         )
 
-        # 6. Feed result back into memory for future queries
+        # 6. Update app trust score based on verdict
+        if decision.verdict == Verdict.BLOCK:
+            app.trust_score = max(0.0, app.trust_score - 3.0)
+            app.is_active = False
+            db.add(app)
+            db.commit()
+            db.refresh(app)
+        elif decision.verdict == Verdict.FLAG:
+            app.trust_score = max(0.0, app.trust_score - 1.5)
+            db.add(app)
+            db.commit()
+            db.refresh(app)
+
+        # 7. Feed result back into memory for future queries
         store_incident(decision, app)
 
         return decision
