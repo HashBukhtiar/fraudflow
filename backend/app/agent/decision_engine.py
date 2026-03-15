@@ -269,6 +269,7 @@ def make_decision(
         confidence=confidence,
         explanation=explanation,
         recommended_action=action,
+        memory_context_used=bool(memory_context and memory_context.strip()),
     )
     db.add(decision)
     db.commit()
