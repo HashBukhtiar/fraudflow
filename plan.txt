@@ -1,0 +1,604 @@
+================================================================================
+FRAUDFLOW — DYNAMIC BACKEND REFACTOR PLAN
+================================================================================
+Date       : 2026-03-14
+Branch     : feat/dynamic-backend  (branch off feat/connect-frontend)
+Objective  : Remove every hardcoded magic number, duplicate constant, and
+             mandatory override from the fraud-detection pipeline so that all
+             risk weights, thresholds, and verdicts are driven by real runtime
+             logic and a single, tunable configuration file.
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+WHAT IS WRONG RIGHT NOW  (audit summary)
+────────────────────────────────────────────────────────────────────────────────
+
+1. The constant NEW_APP_AGE_HOURS (72 hours) is copy-pasted into 4 separate
+   files: profiler.py, scope_rules.py, decision_engine.py, memory_store.py.
+   They can drift out of sync silently.
+
+2. All 7 composite risk-score weights (e.g. off_hours: 4.0, benford: 2.0) are
+   buried in the middle of profiler.py with no label and no central reference.
+
+3. The BLOCK/FLAG/ALLOW score thresholds (>= 6.0 / 3.5–5.9 / < 3.5) are
+   hardcoded *inside a Python string* (the Claude system prompt). The prompt
+   can fall out of sync with the real scoring logic with no error.
+
+4. Two completely separate scoring systems exist:
+   - profiler.py  — used by the main demo pipeline
+   - scope_rules.py — used only by GET /api/profile/{app_id}
+   They have different weight tables and return different scores for the same
+   app. The frontend gets contradictory numbers depending on which route it
+   calls.
+
+5. decision_engine.py contains a _mandatory_verdict() function that bypasses
+   Claude entirely and force-BLOCKs certain apps using hardcoded Python
+   conditions. Claude is never actually deciding those verdicts.
+
+6. TaxEasy's registration date is hardcoded to 2026-03-12. Once today's date
+   passes ~March 15 2026, the new_app_risk signal stops firing and Scenario 3
+   silently breaks.
+
+7. The memory store resets to empty on every server restart. The first run of
+   any scenario always returns "No similar patterns found." — meaningless
+   context for the AI.
+
+8. Trust-score penalties, API result limits, pipeline call window, and other
+   operational numbers are scattered as unnamed literals across pipeline.py,
+   read_routes.py, router.py, and telemetry.py.
+
+
+────────────────────────────────────────────────────────────────────────────────
+EXECUTION ORDER
+────────────────────────────────────────────────────────────────────────────────
+
+  Task 1  →  Create constants.py  (all other tasks depend on this)
+  Task 2  →  Fix seed.py          (independent, self-contained)
+  Task 3  →  Refactor profiler.py
+  Task 4  →  Unify scope_rules.py + router.py
+  Task 5  →  Refactor decision_engine.py
+  Task 6  →  Refactor memory_store.py + pre-seed incidents
+  Task 7  →  Refactor pipeline.py
+  Task 8  →  Minor route cleanups
+  Task 9  →  End-to-end verification
+
+
+================================================================================
+TASK 1 — Create backend/app/constants.py
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Commit  : "feat: add constants.py — single source of truth for all risk params"
+
+Description
+-----------
+Create a new file: backend/app/constants.py
+
+This file is the single source of truth for every tunable number in the
+system. Nothing else in the codebase should hard-code these values again.
+All other tasks in this plan import from this file.
+
+Values to define
+----------------
+
+  # App age
+  NEW_APP_AGE_HOURS: float = 72.0
+    Replaces duplicates in: profiler.py:31, scope_rules.py:56,
+                            decision_engine.py:99 & 122, memory_store.py:99
+
+  # Profiler thresholds
+  HIGH_FREQ_CALLS_PER_MIN: float = 3.0       # call-rate normalisation cap
+  MAX_PERMISSIONS_BEFORE_FLAG: int = 3        # scopes above this = excessive
+  EXCESSIVE_PERMISSIONS_BUFFER: int = 1       # grace buffer on top of max
+  STRUCTURING_BAND_LOW: float = 8_000.0       # lower bound of structuring band
+  STRUCTURING_BAND_HIGH: float = 9_999.0      # upper bound (just below $10k)
+  STRUCTURING_MIN_COUNT: int = 3              # min transactions to trigger flag
+  BENFORD_NORMALISATION_DIVISOR: float = 0.3  # max theoretical mean deviation
+  BENFORD_MIN_SAMPLE_SIZE: int = 5            # minimum amounts to run Benford
+  OFF_HOURS_START: int = 0                    # midnight (inclusive)
+  OFF_HOURS_END: int = 5                      # 5:59 AM (inclusive)
+
+  # Composite risk-score weights  (unified — replaces BOTH weight tables)
+  WEIGHT_UNUSUAL_ENDPOINT: float = 6.0
+  WEIGHT_OFF_HOURS: float = 4.0
+  WEIGHT_HIGH_FREQUENCY: float = 2.0
+  WEIGHT_BENFORD: float = 2.0
+  WEIGHT_NEW_APP: float = 2.0
+  WEIGHT_EXCESSIVE_PERMS: float = 1.5
+  WEIGHT_LOW_TRUST: float = 2.0
+  COMPOSITE_SCORE_SCALE: float = 10.0
+
+  # Verdict score thresholds
+  SCORE_BLOCK_THRESHOLD: float = 6.0
+  SCORE_FLAG_MIN: float = 3.5
+    Note: score < SCORE_FLAG_MIN → ALLOW
+          SCORE_FLAG_MIN <= score < SCORE_BLOCK_THRESHOLD → FLAG
+          score >= SCORE_BLOCK_THRESHOLD → BLOCK
+
+  # AI / decision engine
+  AI_MODEL: str = "claude-haiku-4-5-20251001"
+  AI_MAX_TOKENS: int = 512
+  FALLBACK_VERDICT: str = "FLAG"
+  FALLBACK_CONFIDENCE: float = 0.5
+
+  # Memory store
+  MEMORY_MATCH_THRESHOLD: float = 0.30
+  MEMORY_TOP_K: int = 3
+  MEMORY_OFF_HOURS_QUERY_THRESHOLD: float = 0.3
+  MEMORY_HIGH_FREQ_QUERY_THRESHOLD: float = 2.0
+  MEMORY_BENFORD_QUERY_THRESHOLD: float = 0.5
+
+  # Pipeline
+  PIPELINE_RECENT_CALLS_LIMIT: int = 20
+  TRUST_SCORE_PENALTY_BLOCK: float = 3.0
+  TRUST_SCORE_PENALTY_FLAG: float = 1.5
+
+  # API route defaults
+  API_DEFAULT_LIST_LIMIT: int = 20
+  PROFILER_ROUTE_CALL_WINDOW: int = 50
+
+Acceptance criteria
+-------------------
+  - File exists at backend/app/constants.py
+  - All values listed above are present with the correct types
+  - File has section comments grouping related constants
+  - No logic, no imports (pure constants only)
+
+
+================================================================================
+TASK 2 — Fix backend/app/seed.py  (TaxEasy date drift)
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Commit  : "fix(seed): make TaxEasy registration date relative to prevent drift"
+
+Description
+-----------
+TaxEasy's registered_at is hardcoded to datetime(2026, 3, 12, 8, 0, 0).
+
+Once today's date passes roughly March 15 2026 (72 hours after that date),
+_app_age_hours exceeds NEW_APP_AGE_HOURS and the new_app_risk signal stops
+firing. Scenario 3's BLOCK verdict depends on this signal. The scenario would
+silently produce weaker results with no error or warning.
+
+Changes
+-------
+  File: backend/app/seed.py
+
+  1. Add `from datetime import datetime, timedelta` at the top if not present.
+
+  2. Replace line 58:
+       registered_at=datetime(2026, 3, 12, 8, 0, 0),
+     With:
+       registered_at=datetime.utcnow() - timedelta(hours=48),
+
+     This guarantees TaxEasy is always exactly 48 hours old when seeded,
+     regardless of when seed.py is run. new_app_risk always fires.
+
+  No other changes to seed.py in this task.
+
+Acceptance criteria
+-------------------
+  - TaxEasy's registered_at is computed at runtime, not a fixed literal
+  - Re-running seed.py on any date still produces a TaxEasy that is 48h old
+  - BudgetBuddy and QuickPay registration dates are unchanged (they are
+    intentionally historical and do not affect any risk signals)
+
+
+================================================================================
+TASK 3 — Refactor backend/app/profiler/profiler.py
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Depends : Task 1 (constants.py must exist first)
+Commit  : "refactor(profiler): replace all magic numbers with constants"
+
+Description
+-----------
+profiler.py contains 14+ hardcoded literals for thresholds and weights.
+Replace every one with its named constant imported from constants.py.
+
+Changes
+-------
+  File: backend/app/profiler/profiler.py
+
+  1. Add at the top:
+       from app.constants import (
+           NEW_APP_AGE_HOURS, HIGH_FREQ_CALLS_PER_MIN,
+           MAX_PERMISSIONS_BEFORE_FLAG, STRUCTURING_BAND_LOW,
+           STRUCTURING_BAND_HIGH, STRUCTURING_MIN_COUNT,
+           BENFORD_NORMALISATION_DIVISOR, BENFORD_MIN_SAMPLE_SIZE,
+           OFF_HOURS_START, OFF_HOURS_END,
+           WEIGHT_UNUSUAL_ENDPOINT, WEIGHT_OFF_HOURS, WEIGHT_HIGH_FREQUENCY,
+           WEIGHT_BENFORD, WEIGHT_NEW_APP, WEIGHT_EXCESSIVE_PERMS,
+           WEIGHT_LOW_TRUST, COMPOSITE_SCORE_SCALE,
+       )
+
+  2. Replace each hardcoded literal:
+       Line 30: _HIGH_FREQ_THRESHOLD = 3         → HIGH_FREQ_CALLS_PER_MIN
+       Line 31: _NEW_APP_AGE_HOURS = 72           → NEW_APP_AGE_HOURS
+       Line 32: _MAX_PERMISSIONS = 3              → MAX_PERMISSIONS_BEFORE_FLAG
+       Lines 35-37: structuring band values       → STRUCTURING_BAND_* constants
+       Line 51:  5  (Benford min sample)          → BENFORD_MIN_SAMPLE_SIZE
+       Line 68:  0.3 (Benford normalisation)      → BENFORD_NORMALISATION_DIVISOR
+       Line 126: 0 <= hour <= 5                   → OFF_HOURS_START <= hour <= OFF_HOURS_END
+       Lines 179-187: weight dict literal values  → WEIGHT_* constants
+       Line 200: * 10.0                           → * COMPOSITE_SCORE_SCALE
+
+  3. Delete the __main__ smoke-test block (lines 308-396).
+     It uses its own hardcoded fake data and is misleading now that
+     constants drive the real logic. Tests should be separate files.
+
+Acceptance criteria
+-------------------
+  - No numeric literal remains in profiler.py for any threshold or weight
+  - The composite_risk_score() function produces identical output to before
+  - The __main__ block is gone
+
+
+================================================================================
+TASK 4 — Unify scope_rules.py and router.py  (remove parallel scorer)
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Depends : Tasks 1 and 3
+Commit  : "refactor(profiler): unify scoring — remove scope_rules parallel scorer"
+
+Description
+-----------
+Two independent scoring systems currently exist:
+  - profiler.py composite scorer  → used by the demo pipeline
+  - scope_rules.py compute_scope_risk_score()  → used by GET /api/profile
+
+They have different weight tables and return different composite scores for the
+same app at the same time. The frontend can get contradictory numbers.
+
+This task removes the duplicate scorer and makes both paths use the same logic.
+
+Changes
+-------
+  File: backend/app/profiler/scope_rules.py
+
+  1. Remove the _WEIGHTS dict (lines 150-155).
+  2. Remove the compute_scope_risk_score() function entirely.
+  3. Replace the hardcoded NEW_APP_THRESHOLD_HOURS = 72.0 with an import:
+       from app.constants import NEW_APP_AGE_HOURS
+  4. Replace EXCESSIVE_PERMISSIONS_BUFFER = 1 with an import:
+       from app.constants import EXCESSIVE_PERMISSIONS_BUFFER
+  5. Keep everything else: CATEGORY_ALLOWED_SCOPES, SCOPE_TO_ENDPOINT,
+     check_scope_mismatch(), check_excessive_permissions().
+     These are domain knowledge, not scoring — they belong here.
+
+  File: backend/app/profiler/router.py
+
+  1. Remove the import of compute_scope_risk_score from scope_rules.
+  2. In the GET /api/profile/{app_id} handler:
+     Instead of calling compute_scope_risk_score(), call the main
+     profile_app() function from profiler.py.
+     This returns a proper RiskSignals object identical to what the
+     demo pipeline produces.
+  3. Replace hardcoded RECENT_CALL_WINDOW = 50 with:
+       from app.constants import PROFILER_ROUTE_CALL_WINDOW
+  4. Replace hardcoded .limit(20) with PIPELINE_RECENT_CALLS_LIMIT.
+
+Acceptance criteria
+-------------------
+  - scope_rules.py has no weight dict and no compute_scope_risk_score()
+  - GET /api/profile/{app_id} and POST /api/demo/trigger/{scenario} return
+    the same composite_risk_score for the same app
+  - No import errors after the removal
+
+
+================================================================================
+TASK 5 — Refactor backend/app/agent/decision_engine.py
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Depends : Task 1
+Commit  : "refactor(agent): dynamic thresholds in prompt, remove mandatory overrides"
+
+Description
+-----------
+Three problems to fix in decision_engine.py:
+
+  A. The BLOCK/FLAG/ALLOW score thresholds are hardcoded inside the system
+     prompt string. If someone changes SCORE_BLOCK_THRESHOLD in constants.py,
+     Claude's prompt still says 6.0. The system silently lies.
+
+  B. The _mandatory_verdict() function (lines 122-139) bypasses Claude with
+     hardcoded Python conditions. Scenarios 1 and 3 never actually reach
+     Claude for a verdict. The "AI decision engine" is partially fake.
+
+  C. Magic numbers (72, 0.5, "claude-haiku-4-5-20251001", 512) are still
+     scattered across the file.
+
+Changes
+-------
+  File: backend/app/agent/decision_engine.py
+
+  1. Add imports from constants.py:
+       from app.constants import (
+           AI_MODEL, AI_MAX_TOKENS, FALLBACK_CONFIDENCE,
+           NEW_APP_AGE_HOURS, MEMORY_BENFORD_QUERY_THRESHOLD,
+           SCORE_BLOCK_THRESHOLD, SCORE_FLAG_MIN,
+       )
+
+  2. Replace literals with constants:
+       _MODEL = "claude-haiku-4-5-20251001"  →  _MODEL = AI_MODEL
+       _MAX_TOKENS = 512                     →  _MAX_TOKENS = AI_MAX_TOKENS
+       _FALLBACK_CONFIDENCE = 0.5            →  _FALLBACK_CONFIDENCE = FALLBACK_CONFIDENCE
+       Line 99: < 72                         →  < NEW_APP_AGE_HOURS
+       Line 101: > 0.5                       →  > MEMORY_BENFORD_QUERY_THRESHOLD
+
+  3. Make _SYSTEM_PROMPT dynamic using f-string interpolation:
+     The verdict threshold lines must reference the constants, not literals.
+     Example:
+       ...
+       - BLOCK if composite_risk_score >= {SCORE_BLOCK_THRESHOLD}
+       - FLAG  if composite_risk_score >= {SCORE_FLAG_MIN} and below {SCORE_BLOCK_THRESHOLD}
+       - ALLOW if composite_risk_score < {SCORE_FLAG_MIN}
+       ...
+     Change _SYSTEM_PROMPT from a plain triple-quoted string to an f-string
+     so the thresholds are always in sync with constants.py.
+     Also remove the "MANDATORY VERDICT directive overrides your own judgment"
+     language — Claude should reason freely within the defined framework.
+
+  4. Delete _mandatory_verdict() entirely (lines 122-139).
+     Delete the call site that invokes it (lines 258-263).
+     Claude now decides all verdicts. The score thresholds in the prompt
+     guide its output without bypassing it.
+
+  5. Delete the __main__ smoke-test block (lines 352-418).
+     It uses trust_score on a 0-1 scale (vs the real 0-10 scale) and is
+     actively misleading. It should not exist in the codebase.
+
+Acceptance criteria
+-------------------
+  - _SYSTEM_PROMPT is an f-string referencing SCORE_BLOCK_THRESHOLD and
+    SCORE_FLAG_MIN — changing those constants automatically updates the prompt
+  - No _mandatory_verdict() function exists anywhere in the file
+  - All 3 scenarios now flow through Claude for a verdict
+  - No numeric literals remain for model name, token limit, or thresholds
+
+
+================================================================================
+TASK 6 — Refactor backend/app/memory/memory_store.py  (+ pre-seed incidents)
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Depends : Task 1
+Commit  : "feat(memory): import constants and pre-seed store with realistic incidents"
+
+Description
+-----------
+Two problems:
+
+  A. Five hardcoded thresholds in memory_store.py (match threshold, top-k,
+     three query-building thresholds) are unnamed literals.
+
+  B. The store resets on every server restart. First scenario run always
+     returns "No similar patterns found." — the AI gets no memory context
+     on the first demo, which is exactly when you need it most.
+
+Changes
+-------
+  File: backend/app/memory/memory_store.py
+
+  1. Add imports from constants.py:
+       from app.constants import (
+           MEMORY_MATCH_THRESHOLD, MEMORY_TOP_K,
+           MEMORY_OFF_HOURS_QUERY_THRESHOLD,
+           MEMORY_HIGH_FREQ_QUERY_THRESHOLD,
+           MEMORY_BENFORD_QUERY_THRESHOLD,
+           NEW_APP_AGE_HOURS,
+       )
+
+  2. Replace literals:
+       _MATCH_THRESHOLD = 0.30  →  _MATCH_THRESHOLD = MEMORY_MATCH_THRESHOLD
+       scored[:3]               →  scored[:MEMORY_TOP_K]
+       > 0.3  (off-hours)       →  > MEMORY_OFF_HOURS_QUERY_THRESHOLD
+       > 2.0  (high-freq)       →  > MEMORY_HIGH_FREQ_QUERY_THRESHOLD
+       < 72   (new app)         →  < NEW_APP_AGE_HOURS
+       > 0.5  (Benford)         →  > MEMORY_BENFORD_QUERY_THRESHOLD
+
+  3. Pre-seed the in-memory store at module load time with 4 past incidents:
+
+     Incident 1 — BudgetBuddy overnight payment pattern:
+       app_id  : "budgetbuddy"
+       summary : "Budgeting app accessed /open-banking/payments 15 times at
+                  3 AM. All amounts in the $500s range. Endpoint inconsistent
+                  with declared category. Verdict: BLOCKED."
+       key signals: unusual_endpoint_ratio=1.0, off_hours_ratio=1.0,
+                    composite_risk_score=6.05
+
+     Incident 2 — QuickPay structuring pattern:
+       app_id  : "quickpay"
+       summary : "Payment app initiated 8 transactions all between $9,750
+                  and $9,920 at 2 AM — amounts clustered just below the
+                  $10,000 mandatory reporting threshold. Structuring
+                  behaviour confirmed. Verdict: FLAGGED."
+       key signals: benford_score=0.95, off_hours_ratio=1.0,
+                    composite_risk_score=4.14
+
+     Incident 3 — TaxEasy new-app excessive permissions:
+       app_id  : "taxeasy"
+       summary : "Tax app registered 48 hours prior requested 6 permission
+                  scopes including payments:write and consent:write.
+                  Attempted payment endpoint access inconsistent with
+                  tax-filing purpose. Verdict: BLOCKED."
+       key signals: new_app=True, excessive_permissions=True,
+                    unusual_endpoint_ratio=0.33, composite_risk_score=5.03
+
+     Incident 4 — Generic overnight high-frequency sweep:
+       app_id  : "unknown"
+       summary : "Unclassified third-party app made 42 requests between
+                  midnight and 4 AM across accounts and transactions
+                  endpoints. 2.8 calls/min sustained for 15 minutes.
+                  Consistent with automated data harvesting. Throttled."
+       key signals: off_hours_ratio=1.0, call_rate_per_minute=2.8,
+                    composite_risk_score=5.5
+
+     These 4 incidents are added to the store list directly in the module
+     body (before any route runs). Every scenario run immediately gets
+     meaningful memory matches.
+
+Acceptance criteria
+-------------------
+  - No numeric literals for match threshold, top-k, or query thresholds
+  - On a fresh server start, all 3 demo scenarios return non-empty memory
+    context strings to the AI
+  - Existing store.add_incident() and store.query() interfaces unchanged
+
+
+================================================================================
+TASK 7 — Refactor backend/app/agent/pipeline.py
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Depends : Task 1
+Commit  : "refactor(pipeline): replace magic numbers with constants"
+
+Description
+-----------
+pipeline.py has 3 unnamed literals that affect trust-score mutation and the
+size of the call window fed to the profiler.
+
+Changes
+-------
+  File: backend/app/agent/pipeline.py
+
+  1. Add imports:
+       from app.constants import (
+           PIPELINE_RECENT_CALLS_LIMIT,
+           TRUST_SCORE_PENALTY_BLOCK,
+           TRUST_SCORE_PENALTY_FLAG,
+       )
+
+  2. Replace literals:
+       .limit(20)               →  .limit(PIPELINE_RECENT_CALLS_LIMIT)
+       app.trust_score - 3.0   →  app.trust_score - TRUST_SCORE_PENALTY_BLOCK
+       app.trust_score - 1.5   →  app.trust_score - TRUST_SCORE_PENALTY_FLAG
+
+  No logic changes — purely naming what was anonymous.
+
+Acceptance criteria
+-------------------
+  - No numeric literals remain for these three values
+  - Pipeline behaviour is identical to before
+
+
+================================================================================
+TASK 8 — Minor route cleanups (read_routes.py, router.py, telemetry.py)
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Depends : Task 1
+Commit  : "refactor: replace remaining hardcoded limits with constants"
+
+Description
+-----------
+Several route files have unnamed .limit() calls and query window values.
+
+Changes
+-------
+  File: backend/app/gateway/read_routes.py
+    - Replace .limit(20) for alerts  →  .limit(API_DEFAULT_LIST_LIMIT)
+    - Replace .limit(20) for decisions  →  .limit(API_DEFAULT_LIST_LIMIT)
+    - Replace default limit=50 for calls  →  consider API_DEFAULT_CALLS_LIMIT
+      (add API_DEFAULT_CALLS_LIMIT: int = 50 to constants.py if needed)
+
+  File: backend/app/gateway/telemetry.py
+    - Replace hardcoded 20 in bootstrap live-feed  →  API_DEFAULT_LIST_LIMIT
+
+  File: backend/app/profiler/router.py
+    (covered in Task 4 — do not double-count)
+
+Acceptance criteria
+-------------------
+  - No numeric limit literals remain in read_routes.py or telemetry.py
+  - Behaviour is identical (same default result sizes)
+
+
+================================================================================
+TASK 9 — End-to-end verification
+================================================================================
+Status  : [ ] pending
+Branch  : feat/dynamic-backend
+Commit  : "test: verify all 3 scenarios pass end-to-end after dynamic refactor"
+
+Description
+-----------
+After all 8 tasks above are complete, run the full system and confirm
+everything still works correctly with the dynamic pipeline.
+
+Steps
+-----
+
+  1. Start the backend:
+       cd backend && uvicorn main:app --reload --port 8000
+
+  2. Wipe and re-seed the database:
+       rm -f backend/fraudflow.db
+       python backend/app/seed.py
+
+  3. Trigger all 3 scenarios and check responses:
+       curl -s -X POST http://localhost:8000/api/demo/trigger/rogue_budgeting_app  | python -m json.tool
+       curl -s -X POST http://localhost:8000/api/demo/trigger/payment_anomaly      | python -m json.tool
+       curl -s -X POST http://localhost:8000/api/demo/trigger/social_engineering   | python -m json.tool
+
+     Expected approximate outcomes (now fully Claude-driven):
+       rogue_budgeting_app  — composite ~6.05  → BLOCK  (above 6.0 threshold)
+       payment_anomaly      — composite ~4.14  → FLAG   (between 3.5 and 6.0)
+       social_engineering   — composite ~5.03  → FLAG or BLOCK  (Claude decides)
+
+  4. Check memory context:
+     Each scenario response should now include memory_context_used=true and
+     a non-empty memory context passed to Claude (visible in server logs).
+
+  5. Check scoring consistency:
+       curl -s http://localhost:8000/api/profile/budgetbuddy | python -m json.tool
+     The composite_risk_score from /api/profile must match the risk_signals
+     embedded in the FraudDecision from /api/demo/trigger for the same app.
+
+  6. Check the frontend still renders correctly:
+       cd frontend && npm run dev
+     Run all 3 scenarios on the Demo page. Timeline should animate and final
+     verdict cards should show real Claude-generated explanations.
+
+Acceptance criteria
+-------------------
+  - All 3 scenario triggers return a valid FraudDecision with a non-null
+    explanation from Claude (not the fallback error string)
+  - memory_context_used is true for all 3 scenarios
+  - /api/profile and /api/demo/trigger return the same composite_risk_score
+  - No Python exceptions in the backend logs
+  - Frontend Demo page renders all 3 scenarios without errors
+
+
+================================================================================
+FILES CHANGED SUMMARY
+================================================================================
+
+  NEW FILE:
+    backend/app/constants.py
+
+  MODIFIED:
+    backend/app/seed.py
+    backend/app/profiler/profiler.py
+    backend/app/profiler/scope_rules.py
+    backend/app/profiler/router.py
+    backend/app/agent/decision_engine.py
+    backend/app/agent/pipeline.py
+    backend/app/memory/memory_store.py
+    backend/app/gateway/read_routes.py
+    backend/app/gateway/telemetry.py
+
+  NOT TOUCHED:
+    backend/app/models.py          — no changes, team agreement required
+    backend/app/agent/scenarios.py — scenario call data is intentional fixture
+    backend/app/gateway/openbanking.py  — mock bank, intentionally static
+    backend/app/gateway/middleware.py   — ENDPOINT_SCOPE_MAP is domain knowledge
+    frontend/                      — no backend contract changes affect frontend
+
+================================================================================
