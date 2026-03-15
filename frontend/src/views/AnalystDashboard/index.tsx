@@ -106,7 +106,10 @@ const verdictConfig: Record<string, string> = {
 }
 
 function timeAgo(iso: string) {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  // Backend returns naive-UTC timestamps (no Z suffix) — force UTC interpretation
+  const utcIso = iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'
+  const diff = Math.floor((Date.now() - new Date(utcIso).getTime()) / 1000)
+  if (diff < 0) return 'Just now'
   if (diff < 60) return 'Just now'
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   return `${Math.floor(diff / 3600)}h ago`
