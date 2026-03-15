@@ -53,12 +53,12 @@ _SYSTEM_PROMPT = (
     "You are a bank fraud analyst reviewing third-party fintech app behavior in "
     "Canada's Open Banking ecosystem. Be concise and precise. "
     "Respond only in JSON with no preamble or markdown.\n\n"
-    f"Verdict decision rules (apply in order — first match wins):\n"
+    "Verdict decision rules (apply in order — first match wins):\n"
     f"  1. BLOCK  — composite_risk_score >= {SCORE_BLOCK_THRESHOLD}\n"
     f"  2. FLAG   — composite_risk_score >= {SCORE_FLAG_MIN} and < {SCORE_BLOCK_THRESHOLD}\n"
-    f"  3. APPROVE — composite_risk_score < {SCORE_FLAG_MIN}\n"
-    "Use your full analytical judgment to apply these thresholds based on "
-    "the risk signals and memory context provided."
+    f"  3. ALLOW  — composite_risk_score < {SCORE_FLAG_MIN}\n\n"
+    "Use your judgment as a fraud analyst. Consider the full context — risk signals, "
+    "memory of past incidents, app category, and permission scope — not just the score."
 )
 
 # Fallback values used when the API call or JSON parse fails
@@ -141,7 +141,7 @@ Memory context (similar past incidents):
 
 Return a JSON object with exactly these keys:
 {{
-  "verdict": "APPROVE" | "FLAG" | "BLOCK",
+  "verdict": "ALLOW" | "FLAG" | "BLOCK",
   "confidence": <float 0.0–1.0>,
   "explanation": "<1-2 sentences written like a fraud analyst>",
   "recommended_action": "allow" | "log" | "flag_for_review" | "throttle" | "revoke_token"
