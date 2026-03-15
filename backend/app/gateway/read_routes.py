@@ -16,6 +16,7 @@ from sqlmodel import Session, select
 
 from app.database import get_session
 from app.models import AlertEvent, FraudDecision
+from app.constants import API_DEFAULT_LIST_LIMIT
 
 router = APIRouter(prefix="/api", tags=["Dashboard"])
 
@@ -29,7 +30,7 @@ def get_alerts(db: SessionDep) -> list[AlertEvent]:
         db.exec(
             select(AlertEvent)
             .order_by(AlertEvent.triggered_at.desc())  # type: ignore[arg-type]
-            .limit(20)
+            .limit(API_DEFAULT_LIST_LIMIT)
         ).all()
     )
 
@@ -41,6 +42,6 @@ def get_decisions(db: SessionDep) -> list[FraudDecision]:
         db.exec(
             select(FraudDecision)
             .order_by(FraudDecision.decided_at.desc())  # type: ignore[arg-type]
-            .limit(20)
+            .limit(API_DEFAULT_LIST_LIMIT)
         ).all()
     )

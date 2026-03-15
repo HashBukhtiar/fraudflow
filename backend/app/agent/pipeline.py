@@ -10,6 +10,7 @@ import logging
 
 from sqlmodel import Session, select
 
+from ..constants import PIPELINE_RECENT_CALLS_LIMIT
 from ..database import engine
 from ..models import APICallLog, AppProfile, FraudDecision
 from ..profiler.profiler import generate_risk_signals
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision:
-    """Evaluate fraud risk for *app_id* using its 20 most recent API calls.
+    """Evaluate fraud risk for *app_id* using its most recent API calls.
 
     Always opens its own DB session so it is safe to call as a FastAPI
     BackgroundTask (the request-scoped session will already be closed by the
@@ -28,7 +29,7 @@ def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision
 
     Steps:
       1. Load AppProfile from DB
-      2. Load last 20 APICallLog records (newest first)
+      2. Load last PIPELINE_RECENT_CALLS_LIMIT APICallLog records (newest first)
       3. generate_risk_signals  → RiskSignals
       4. query_similar_behavior → memory context string
       5. make_decision          → saves RiskSignals + FraudDecision + AlertEvent
@@ -52,7 +53,7 @@ def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision
                 select(APICallLog)
                 .where(APICallLog.app_id == app_id)
                 .order_by(APICallLog.timestamp.desc())  # type: ignore[arg-type]
-                .limit(20)
+                .limit(PIPELINE_RECENT_CALLS_LIMIT)
             ).all()
         )
         logger.debug("pipeline [%s]: %d recent calls loaded", app_id, len(recent_calls))
