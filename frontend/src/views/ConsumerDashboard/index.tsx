@@ -160,6 +160,7 @@ export default function ConsumerDashboard() {
   const unseenCount    = alerts.filter((a) => !a.resolved).length
 
   return (
+    <>
     <div className="min-h-screen bg-background">
       {/* Bank portal header */}
       <div className="border-b border-border bg-card">
@@ -302,93 +303,94 @@ export default function ConsumerDashboard() {
           </div>
         </div>
 
-        {/* Add app modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="w-full max-w-sm rounded-2xl bg-background border border-border shadow-xl p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-base">Connect a New App</h2>
-                <button onClick={() => setShowAddModal(false)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
-              </div>
-
-              {/* App name */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">App Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. MyBudgetApp"
-                  value={addForm.name}
-                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                />
-              </div>
-
-              {/* Category */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Category</label>
-                <select
-                  value={addForm.category}
-                  onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value as AppCategory }))}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
-                >
-                  <option value="budgeting">Budgeting</option>
-                  <option value="payments">Payments</option>
-                  <option value="tax">Tax & Filing</option>
-                  <option value="lending">Lending</option>
-                  <option value="investing">Investing</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              {/* Permissions */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-medium text-muted-foreground">Permissions</label>
-                <div className="space-y-2">
-                  {([
-                    ['accounts:read',      'View your accounts'],
-                    ['transactions:read',  'View transaction history'],
-                    ['balances:read',      'View account balances'],
-                    ['payments:write',     'Make payments'],
-                    ['consent:write',      'Manage consent settings'],
-                    ['personal_info:read', 'Access personal information'],
-                  ] as const).map(([scope, label]) => (
-                    <label key={scope} className="flex items-center gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={addForm.permissions.includes(scope)}
-                        onChange={() => togglePermission(scope)}
-                        className="rounded border-border accent-primary"
-                      />
-                      <span className="text-xs text-foreground/80">{label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-2 pt-1">
-                <button
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 rounded-lg border border-border py-2 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddApp}
-                  disabled={adding || !addForm.name.trim()}
-                  className="flex-1 rounded-lg bg-primary text-primary-foreground py-2 text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                >
-                  {adding ? 'Connecting…' : 'Connect App'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Security notifications */}
         <AlertsFeed alerts={alerts} />
 
       </div>
     </div>
+
+    {/* Add app modal — outside page wrapper so fixed overlay covers full viewport */}
+    {showAddModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="w-full max-w-sm rounded-2xl bg-background border border-border shadow-xl p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="font-semibold text-base">Connect a New App</h2>
+            <button onClick={() => setShowAddModal(false)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
+          </div>
+
+          {/* App name */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">App Name</label>
+            <input
+              type="text"
+              placeholder="e.g. MyBudgetApp"
+              value={addForm.name}
+              onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            />
+          </div>
+
+          {/* Category */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Category</label>
+            <select
+              value={addForm.category}
+              onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value as AppCategory }))}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              <option value="budgeting">Budgeting</option>
+              <option value="payments">Payments</option>
+              <option value="tax">Tax & Filing</option>
+              <option value="lending">Lending</option>
+              <option value="investing">Investing</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          {/* Permissions */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Permissions</label>
+            <div className="space-y-2">
+              {([
+                ['accounts:read',      'View your accounts'],
+                ['transactions:read',  'View transaction history'],
+                ['balances:read',      'View account balances'],
+                ['payments:write',     'Make payments'],
+                ['consent:write',      'Manage consent settings'],
+                ['personal_info:read', 'Access personal information'],
+              ] as const).map(([scope, label]) => (
+                <label key={scope} className="flex items-center gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={addForm.permissions.includes(scope)}
+                    onChange={() => togglePermission(scope)}
+                    className="rounded border-border accent-primary"
+                  />
+                  <span className="text-xs text-foreground/80">{label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={() => setShowAddModal(false)}
+              className="flex-1 rounded-lg border border-border py-2 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAddApp}
+              disabled={adding || !addForm.name.trim()}
+              className="flex-1 rounded-lg bg-primary text-primary-foreground py-2 text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {adding ? 'Connecting…' : 'Connect App'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
