@@ -3,6 +3,9 @@ In-memory incident store for the FraudFlow memory layer.
 
 Stores plain-English summaries of past fraud decisions and queries them
 using keyword overlap — fast, zero-dependency, good enough for demo scale.
+
+Pre-seeded with 4 representative incidents so every scenario run immediately
+receives meaningful memory context, even on a fresh server start.
 """
 
 from __future__ import annotations
@@ -11,11 +14,19 @@ import logging
 from dataclasses import dataclass, field
 
 from ..models import AppProfile, FraudDecision, RiskSignals
+from ..constants import (
+    MEMORY_MATCH_THRESHOLD,
+    MEMORY_TOP_K,
+    MEMORY_OFF_HOURS_QUERY_THRESHOLD,
+    MEMORY_HIGH_FREQ_QUERY_THRESHOLD,
+    MEMORY_BENFORD_QUERY_THRESHOLD,
+    NEW_APP_AGE_HOURS,
+)
 
 logger = logging.getLogger(__name__)
 
 # Minimum fraction of query keywords that must appear in a stored record
-_MATCH_THRESHOLD = 0.30
+_MATCH_THRESHOLD = MEMORY_MATCH_THRESHOLD
 
 
 @dataclass
@@ -26,7 +37,55 @@ class _IncidentRecord:
     category: str
 
 
-_store: list[_IncidentRecord] = []
+# ---------------------------------------------------------------------------
+# Pre-seeded incidents — always present from the first server start
+# ---------------------------------------------------------------------------
+
+_PRESEED: list[_IncidentRecord] = [
+    _IncidentRecord(
+        text=(
+            "Budgeting app accessed /open-banking/payments 15 times at 3 AM. "
+            "All amounts in the $500s range. Endpoint inconsistent with declared "
+            "category. Verdict: BLOCKED."
+        ),
+        app_id="budgetbuddy",
+        verdict="BLOCK",
+        category="budgeting",
+    ),
+    _IncidentRecord(
+        text=(
+            "Payment app initiated 8 transactions all between $9,750 and $9,920 "
+            "at 2 AM — amounts clustered just below the $10,000 mandatory reporting "
+            "threshold. Structuring behaviour confirmed. Verdict: FLAGGED."
+        ),
+        app_id="quickpay",
+        verdict="FLAG",
+        category="payments",
+    ),
+    _IncidentRecord(
+        text=(
+            "Tax app registered 48 hours prior requested 6 permission scopes "
+            "including payments:write and consent:write. Attempted payment endpoint "
+            "access inconsistent with tax-filing purpose. Verdict: BLOCKED."
+        ),
+        app_id="taxeasy",
+        verdict="BLOCK",
+        category="tax",
+    ),
+    _IncidentRecord(
+        text=(
+            "Unclassified third-party app made 42 requests between midnight and "
+            "4 AM across accounts and transactions endpoints. 2.8 calls/min "
+            "sustained for 15 minutes. Consistent with automated data harvesting. "
+            "Throttled."
+        ),
+        app_id="unknown",
+        verdict="FLAG",
+        category="other",
+    ),
+]
+
+_store: list[_IncidentRecord] = list(_PRESEED)
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +136,7 @@ def query_similar_behavior(app: AppProfile, signals: RiskSignals) -> str:
         return "No similar patterns found."
 
     scored.sort(key=lambda x: x[0], reverse=True)
-    summaries = [text for _, text in scored[:3]]
+    summaries = [text for _, text in scored[:MEMORY_TOP_K]]
     return "Similar past incidents: " + " | ".join(summaries)
 
 
@@ -91,15 +150,15 @@ def _build_query(app: AppProfile, signals: RiskSignals) -> str:
 
     if signals.unusual_endpoint_ratio > 0:
         parts.append("accessing payment endpoints")
-    if signals.off_hours_ratio > 0.3:
+    if signals.off_hours_ratio > MEMORY_OFF_HOURS_QUERY_THRESHOLD:
         parts.append("overnight")
-    if signals.call_rate_per_minute > 2.0:
+    if signals.call_rate_per_minute > MEMORY_HIGH_FREQ_QUERY_THRESHOLD:
         parts.append("with high frequency")
-    if signals.app_age_hours < 72:
+    if signals.app_age_hours < NEW_APP_AGE_HOURS:
         parts.append("newly registered")
     if signals.excessive_permissions:
         parts.append("requesting excessive permissions")
-    if signals.benford_score > 0.5:
+    if signals.benford_score > MEMORY_BENFORD_QUERY_THRESHOLD:
         parts.append("with anomalous transaction amounts")
 
     # Fall back to a trust-score phrase so we always have a non-trivial query
