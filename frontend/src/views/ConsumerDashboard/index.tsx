@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getApps, getAlerts, connectApp, revokeApp } from '@/api/client'
-import type { AppProfile, AlertEvent } from '@/api/types'
+import api from '@/api/client'
+import type { AppProfile, AlertEvent, AppCategory } from '@/api/types'
 import AppCard from './AppCard'
 import AlertsFeed from './AlertsFeed'
 
@@ -85,6 +86,9 @@ export default function ConsumerDashboard() {
   const [loading, setLoading] = useState(false)
   const [connecting, setConnecting] = useState<string | null>(null)
   const [revoking, setRevoking]     = useState<string | null>(null)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addForm, setAddForm] = useState({ name: '', category: 'other' as AppCategory, permissions: [] as string[] })
+  const [adding, setAdding] = useState(false)
 
   const refresh = () =>
     Promise.all([getApps(), getAlerts()])
@@ -120,6 +124,36 @@ export default function ConsumerDashboard() {
     }
     setRevoking(null)
   }
+
+  const handleAddApp = async () => {
+    if (!addForm.name.trim()) return
+    setAdding(true)
+    try {
+      const appId = addForm.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+      await api.post('/api/apps', {
+        app_id: appId,
+        name: addForm.name.trim(),
+        category: addForm.category,
+        description: '',
+        trust_score: 1.0,
+        trust_level: 'NEW',
+        permissions: addForm.permissions.join(','),
+        is_active: true,
+      })
+      await refresh()
+      setShowAddModal(false)
+      setAddForm({ name: '', category: 'other', permissions: [] })
+    } catch {
+      // ignore (e.g. duplicate app_id)
+    }
+    setAdding(false)
+  }
+
+  const togglePermission = (p: string) =>
+    setAddForm((f) => ({
+      ...f,
+      permissions: f.permissions.includes(p) ? f.permissions.filter((x) => x !== p) : [...f.permissions, p],
+    }))
 
   const connectedApps  = apps.filter((a) => a.is_active)
   const availableApps  = apps.filter((a) => !a.is_active)
@@ -208,55 +242,145 @@ export default function ConsumerDashboard() {
         </div>
 
         {/* Available to connect */}
-        {availableApps.length > 0 && (
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
-              Available to Connect
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {availableApps.map((app) => {
-                const permissions = (app.permissions ?? '').split(',').map((s) => s.trim()).filter(Boolean)
-                const permissionLabels: Record<string, string> = {
-                  'accounts:read':      'View your accounts',
-                  'transactions:read':  'View transaction history',
-                  'payments:write':     'Make payments',
-                  'balances:read':      'View account balances',
-                  'consent:write':      'Manage consent settings',
-                  'personal_info:read': 'Access personal information',
-                }
-                const isConnecting = connecting === app.app_id
-                return (
-                  <div key={app.app_id} className="rounded-xl border border-dashed border-border bg-muted/20 p-4 flex flex-col gap-3">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center font-bold text-sm text-muted-foreground shrink-0">
-                        {app.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-sm">{app.name}</p>
-                        <p className="text-xs text-muted-foreground">{app.description}</p>
-                      </div>
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
+            Available to Connect
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {availableApps.map((app) => {
+              const permissions = (app.permissions ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+              const permissionLabels: Record<string, string> = {
+                'accounts:read':      'View your accounts',
+                'transactions:read':  'View transaction history',
+                'payments:write':     'Make payments',
+                'balances:read':      'View account balances',
+                'consent:write':      'Manage consent settings',
+                'personal_info:read': 'Access personal information',
+              }
+              const isConnecting = connecting === app.app_id
+              return (
+                <div key={app.app_id} className="rounded-xl border border-dashed border-border bg-muted/20 p-4 flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center font-bold text-sm text-muted-foreground shrink-0">
+                      {app.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-1.5">This app will be able to:</p>
-                      <ul className="space-y-1">
-                        {permissions.map((p) => (
-                          <li key={p} className="flex items-start gap-1.5 text-xs text-foreground/70">
-                            <span className="mt-0.5 w-3 h-3 rounded-full border border-border bg-muted shrink-0" />
-                            {permissionLabels[p] ?? p}
-                          </li>
-                        ))}
-                      </ul>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">{app.name}</p>
+                      <p className="text-xs text-muted-foreground">{app.description}</p>
                     </div>
-                    <button
-                      onClick={() => handleConnect(app.app_id)}
-                      disabled={isConnecting}
-                      className="mt-auto w-full rounded-lg bg-primary text-primary-foreground text-xs font-semibold py-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
-                    >
-                      {isConnecting ? 'Connecting…' : 'Connect'}
-                    </button>
                   </div>
-                )
-              })}
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-1.5">This app will be able to:</p>
+                    <ul className="space-y-1">
+                      {permissions.map((p) => (
+                        <li key={p} className="flex items-start gap-1.5 text-xs text-foreground/70">
+                          <span className="mt-0.5 w-3 h-3 rounded-full border border-border bg-muted shrink-0" />
+                          {permissionLabels[p] ?? p}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <button
+                    onClick={() => handleConnect(app.app_id)}
+                    disabled={isConnecting}
+                    className="mt-auto w-full rounded-lg bg-primary text-primary-foreground text-xs font-semibold py-2 hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {isConnecting ? 'Connecting…' : 'Connect'}
+                  </button>
+                </div>
+              )
+            })}
+
+            {/* Add new app tile */}
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="rounded-xl border-2 border-dashed border-border bg-transparent hover:bg-muted/30 transition-colors flex flex-col items-center justify-center gap-2 min-h-[160px] text-muted-foreground hover:text-foreground"
+            >
+              <span className="w-10 h-10 rounded-full border-2 border-dashed border-current flex items-center justify-center text-xl font-light">+</span>
+              <span className="text-xs font-medium">Add New App</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Add app modal */}
+        {showAddModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-sm rounded-2xl bg-background border border-border shadow-xl p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-base">Connect a New App</h2>
+                <button onClick={() => setShowAddModal(false)} className="text-muted-foreground hover:text-foreground text-lg leading-none">&times;</button>
+              </div>
+
+              {/* App name */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">App Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. MyBudgetApp"
+                  value={addForm.name}
+                  onChange={(e) => setAddForm((f) => ({ ...f, name: e.target.value }))}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                />
+              </div>
+
+              {/* Category */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Category</label>
+                <select
+                  value={addForm.category}
+                  onChange={(e) => setAddForm((f) => ({ ...f, category: e.target.value as AppCategory }))}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30"
+                >
+                  <option value="budgeting">Budgeting</option>
+                  <option value="payments">Payments</option>
+                  <option value="tax">Tax & Filing</option>
+                  <option value="lending">Lending</option>
+                  <option value="investing">Investing</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              {/* Permissions */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Permissions</label>
+                <div className="space-y-2">
+                  {([
+                    ['accounts:read',      'View your accounts'],
+                    ['transactions:read',  'View transaction history'],
+                    ['balances:read',      'View account balances'],
+                    ['payments:write',     'Make payments'],
+                    ['consent:write',      'Manage consent settings'],
+                    ['personal_info:read', 'Access personal information'],
+                  ] as const).map(([scope, label]) => (
+                    <label key={scope} className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={addForm.permissions.includes(scope)}
+                        onChange={() => togglePermission(scope)}
+                        className="rounded border-border accent-primary"
+                      />
+                      <span className="text-xs text-foreground/80">{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 rounded-lg border border-border py-2 text-xs font-medium text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddApp}
+                  disabled={adding || !addForm.name.trim()}
+                  className="flex-1 rounded-lg bg-primary text-primary-foreground py-2 text-xs font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {adding ? 'Connecting…' : 'Connect App'}
+                </button>
+              </div>
             </div>
           </div>
         )}
