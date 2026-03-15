@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.database import get_session
-from app.models import APICallLog, AppCategory, AppProfile, TrustLevel
+from app.models import AlertEvent, APICallLog, AppCategory, AppProfile, FraudDecision, RiskSignals, TrustLevel
 
 router = APIRouter(prefix="/api/apps", tags=["App Registry"])
 
@@ -87,6 +87,65 @@ def get_app_calls(
     ).all()
 
     return list(calls)
+
+
+@router.post("/{app_id}/revoke", response_model=AppProfile)
+def revoke_app(app_id: str, session: SessionDep) -> AppProfile:
+    """Deactivate an app — consumer revokes access."""
+    app = session.exec(
+        select(AppProfile).where(AppProfile.app_id == app_id)
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail=f"App '{app_id}' not found")
+
+    app.is_active = False
+    session.add(app)
+    session.commit()
+    session.refresh(app)
+    return app
+
+
+@router.post("/{app_id}/connect", response_model=AppProfile)
+def connect_app(app_id: str, session: SessionDep) -> AppProfile:
+    """Activate an inactive app and wipe its fraud history for a clean demo start."""
+    app = session.exec(
+        select(AppProfile).where(AppProfile.app_id == app_id)
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail=f"App '{app_id}' not found")
+
+    # Wipe stale fraud history so the attacker view starts fresh
+    for log in session.exec(select(APICallLog).where(APICallLog.app_id == app_id)).all():
+        session.delete(log)
+    for alert in session.exec(select(AlertEvent).where(AlertEvent.app_id == app_id)).all():
+        session.delete(alert)
+    for decision in session.exec(select(FraudDecision).where(FraudDecision.app_id == app_id)).all():
+        session.delete(decision)
+    for signal in session.exec(select(RiskSignals).where(RiskSignals.app_id == app_id)).all():
+        session.delete(signal)
+
+    # Clear in-memory incident store
+    try:
+        from app.memory.memory_store import _store
+        _store[:] = [r for r in _store if r.app_id != app_id]
+    except Exception:
+        pass
+
+    app.is_active = True
+    session.add(app)
+    session.commit()
+    session.refresh(app)
+
+    # Reset pipeline cooldown so the first attacker action triggers a fresh run
+    try:
+        from app.agent.pipeline import reset_pipeline_cooldown
+        reset_pipeline_cooldown(app_id)
+    except Exception:
+        pass
+
+    return app
 
 
 @router.post("", response_model=AppProfile, status_code=201)

@@ -74,7 +74,7 @@ OFF_HOURS_END: int = 5     # 05:59 AM
 # Signal weights — their relative importance in the composite score:
 WEIGHT_UNUSUAL_ENDPOINT: float = 6.0   # non-payment app calling payment endpoint
 WEIGHT_OFF_HOURS: float = 4.0          # sustained overnight access
-WEIGHT_HIGH_FREQUENCY: float = 2.0     # burst call rate
+WEIGHT_HIGH_FREQUENCY: float = 4.0     # burst call rate
 WEIGHT_BENFORD: float = 2.0            # numeric anomaly / structuring
 WEIGHT_NEW_APP: float = 2.0            # recently registered app
 WEIGHT_EXCESSIVE_PERMS: float = 1.5    # more scopes than category warrants
@@ -93,8 +93,8 @@ COMPOSITE_SCORE_SCALE: float = 10.0
 #   score >= SCORE_BLOCK_THRESHOLD              → BLOCK
 #   SCORE_FLAG_MIN <= score < SCORE_BLOCK_THRESHOLD  → FLAG
 #   score < SCORE_FLAG_MIN                      → ALLOW
-SCORE_BLOCK_THRESHOLD: float = 6.0
-SCORE_FLAG_MIN: float = 3.5
+SCORE_BLOCK_THRESHOLD: float = 4.0
+SCORE_FLAG_MIN: float = 3.0
 
 # ---------------------------------------------------------------------------
 # 5. AI / decision engine

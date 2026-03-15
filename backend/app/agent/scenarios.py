@@ -102,7 +102,7 @@ def scenario_rogue_budgeting_app(db: Session) -> FraudDecision:
     logger.debug("scenario_rogue_budgeting_app: seeded %d calls", len(seeded_ids))
 
     try:
-        decision = run_fraud_pipeline(app.app_id, db)
+        decision = run_fraud_pipeline(app.app_id, db, force=True)
     except Exception:
         logger.exception("scenario_rogue_budgeting_app: pipeline failed; seeded calls preserved for debugging")
         raise
@@ -149,7 +149,7 @@ def scenario_payment_anomaly(db: Session) -> FraudDecision:
     logger.debug("scenario_payment_anomaly: seeded %d calls", len(seeded_ids))
 
     try:
-        decision = run_fraud_pipeline(app.app_id, db)
+        decision = run_fraud_pipeline(app.app_id, db, force=True)
     except Exception:
         logger.exception("scenario_payment_anomaly: pipeline failed; seeded calls preserved for debugging")
         raise
@@ -211,7 +211,7 @@ def scenario_social_engineering(db: Session) -> FraudDecision:
     logger.debug("scenario_social_engineering: seeded %d calls", len(seeded_ids))
 
     try:
-        decision = run_fraud_pipeline(app.app_id, db)
+        decision = run_fraud_pipeline(app.app_id, db, force=True)
     except Exception:
         logger.exception("scenario_social_engineering: pipeline failed; seeded calls preserved for debugging")
         raise

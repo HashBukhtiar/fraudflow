@@ -7,6 +7,7 @@ Called by Person A's gateway as a background task after logging each APICallLog.
 from __future__ import annotations
 
 import logging
+import time
 
 from sqlmodel import Session, select
 
@@ -23,8 +24,24 @@ from .decision_engine import make_decision
 
 logger = logging.getLogger(__name__)
 
+# Per-app cooldown — prevents duplicate pipeline runs from rapid bursts of calls
+_COOLDOWN_S = 5.0
+_last_run_ts: dict[str, float] = {}
 
-def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision:
+# Minimum calls before the pipeline evaluates — lets innocent calls pass through
+_MIN_CALLS_FOR_EVAL = 5
+
+# Override trust penalties for smoother demo escalation
+_FLAG_PENALTY = 0.5   # gentle — takes multiple FLAGs to erode trust
+_BLOCK_PENALTY = TRUST_SCORE_PENALTY_BLOCK
+
+
+def reset_pipeline_cooldown(app_id: str) -> None:
+    """Clear the cooldown for an app so the next gateway call triggers a fresh run."""
+    _last_run_ts.pop(app_id, None)
+
+
+def run_fraud_pipeline(app_id: str, _db: Session | None = None, *, force: bool = False) -> FraudDecision | None:
     """Evaluate fraud risk for *app_id* using its most recent API calls.
 
     Always opens its own DB session so it is safe to call as a FastAPI
@@ -43,6 +60,14 @@ def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision
     Raises:
         ValueError: if app_id does not exist in the database.
     """
+    # Cooldown check — skip if a run already happened recently for this app
+    if not force:
+        now = time.monotonic()
+        if now - _last_run_ts.get(app_id, 0.0) < _COOLDOWN_S:
+            logger.debug("pipeline [%s]: skipped (cooldown)", app_id)
+            return None
+        _last_run_ts[app_id] = now
+
     with Session(engine) as db:
         # 1. Load app
         app = db.exec(
@@ -61,6 +86,14 @@ def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision
             ).all()
         )
         logger.debug("pipeline [%s]: %d recent calls loaded", app_id, len(recent_calls))
+
+        # 2b. Skip evaluation until enough calls have accumulated
+        if len(recent_calls) < _MIN_CALLS_FOR_EVAL:
+            logger.debug(
+                "pipeline [%s]: only %d calls (need %d) — skipping evaluation",
+                app_id, len(recent_calls), _MIN_CALLS_FOR_EVAL,
+            )
+            return None
 
         # 3. Profiler
         signals = generate_risk_signals(app, recent_calls)
@@ -86,7 +119,7 @@ def run_fraud_pipeline(app_id: str, _db: Session | None = None) -> FraudDecision
             db.commit()
             db.refresh(app)
         elif decision.verdict == Verdict.FLAG:
-            app.trust_score = max(0.0, app.trust_score - TRUST_SCORE_PENALTY_FLAG)
+            app.trust_score = max(0.0, app.trust_score - _FLAG_PENALTY)
             db.add(app)
             db.commit()
             db.refresh(app)

@@ -135,8 +135,9 @@ def reset_app(app_id: str, db: SessionDep) -> dict:
         for signal in signals:
             db.delete(signal)
 
-    # Reset trust score to seed value
+    # Reset trust score to seed value and deactivate (so consumer must re-connect)
     app.trust_score = _SEED_TRUST_SCORES.get(app_id, 1.0)
+    app.is_active = False
     db.add(app)
 
     db.commit()
@@ -146,6 +147,13 @@ def reset_app(app_id: str, db: SessionDep) -> dict:
         from app.memory.memory_store import _store
         _store[:] = [r for r in _store if r.app_id != app_id]
     except Exception:
-        pass  # non-critical
+        pass
+
+    # Reset pipeline cooldown so the next action fires immediately
+    try:
+        from app.agent.pipeline import reset_pipeline_cooldown
+        reset_pipeline_cooldown(app_id)
+    except Exception:
+        pass
 
     return {"reset": True, "app_id": app_id}

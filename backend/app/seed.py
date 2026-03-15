@@ -65,7 +65,8 @@ SEED_APPS: list[dict] = [
             "accounts:read,transactions:read,balances:read,"
             "payments:write,consent:write,personal_info:read"
         ),
-        "is_active": True,
+        # Starts inactive — consumer must connect it during the demo
+        "is_active": False,
     },
 ]
 

@@ -1,11 +1,12 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
-import type { APICallLog, AppProfile } from '@/api/types'
+import type { APICallLog, AppProfile, FraudDecision } from '@/api/types'
 
 interface CallFeedProps {
   calls: APICallLog[]
   apps: AppProfile[]
+  decisions: FraudDecision[]
 }
 
 function timeAgo(iso: string) {
@@ -24,9 +25,36 @@ const scenarioLabels: Record<string, string> = {
   social_engineering:    'New app risk',
 }
 
-export default function CallFeed({ calls, apps }: CallFeedProps) {
+export default function CallFeed({ calls, apps, decisions }: CallFeedProps) {
   // Key by app_id (string) — the FK used in APICallLog
   const appMap = Object.fromEntries(apps.map((a) => [a.app_id, a]))
+
+  // Decisions sorted oldest-first per app — used to find the active verdict at call time
+  const decisionsByApp: Record<string, FraudDecision[]> = {}
+  for (const d of decisions) {
+    if (!decisionsByApp[d.app_id]) decisionsByApp[d.app_id] = []
+    decisionsByApp[d.app_id].push(d)
+  }
+  // decisions arrive newest-first from backend — reverse to get oldest-first
+  for (const key of Object.keys(decisionsByApp)) {
+    decisionsByApp[key].reverse()
+  }
+
+  // Return the verdict that was active at the time a call was made.
+  // i.e. the most recent decision whose decided_at <= call.timestamp + 10s buffer
+  const verdictAtTime = (appId: string, callTimestamp: string): string => {
+    const appDecisions = decisionsByApp[appId]
+    if (!appDecisions?.length) return 'ALLOW'
+    const callMs = new Date(callTimestamp.endsWith('Z') ? callTimestamp : callTimestamp + 'Z').getTime()
+    let active = 'ALLOW'
+    for (const d of appDecisions) {
+      const decidedMs = new Date(d.decided_at.endsWith('Z') ? d.decided_at : d.decided_at + 'Z').getTime()
+      // Pipeline runs slightly after the calls that triggered it — allow 15s window
+      if (decidedMs <= callMs + 15_000) active = d.verdict
+      else break
+    }
+    return active
+  }
 
   return (
     <Card className="flex flex-col">
@@ -57,14 +85,21 @@ export default function CallFeed({ calls, apps }: CallFeedProps) {
             <tbody>
               {calls.map((call) => {
                 const app = appMap[call.app_id]
-                const allowed = !call.flagged
+                const verdict = verdictAtTime(call.app_id, call.timestamp)
+                const rowHighlight =
+                  verdict === 'BLOCK' ? 'bg-destructive/5' :
+                  verdict === 'FLAG'  ? 'bg-amber-500/5' : ''
+                const badgeClass =
+                  verdict === 'BLOCK' ? 'bg-destructive/10 text-destructive border-destructive/20' :
+                  verdict === 'FLAG'  ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' :
+                                       'bg-primary/10 text-primary border-primary/20'
+                const badgeLabel =
+                  verdict === 'BLOCK' ? 'Blocked' :
+                  verdict === 'FLAG'  ? 'Flagged' : 'Allowed'
                 return (
                   <tr
                     key={call.id}
-                    className={cn(
-                      'border-b border-border last:border-0',
-                      call.flagged && 'bg-destructive/5',
-                    )}
+                    className={cn('border-b border-border last:border-0', rowHighlight)}
                   >
                     <td className="px-4 py-3">
                       <p className="font-medium text-sm leading-tight">{app?.name ?? call.app_id}</p>
@@ -83,15 +118,8 @@ export default function CallFeed({ calls, apps }: CallFeedProps) {
                       {timeAgo(call.timestamp)}
                     </td>
                     <td className="px-4 py-3">
-                      <span
-                        className={cn(
-                          'px-2 py-0.5 rounded-full text-xs font-medium border',
-                          allowed
-                            ? 'bg-primary/10 text-primary border-primary/20'
-                            : 'bg-destructive/10 text-destructive border-destructive/20',
-                        )}
-                      >
-                        {allowed ? 'Allowed' : 'Blocked'}
+                      <span className={cn('px-2 py-0.5 rounded-full text-xs font-medium border', badgeClass)}>
+                        {badgeLabel}
                       </span>
                     </td>
                   </tr>
