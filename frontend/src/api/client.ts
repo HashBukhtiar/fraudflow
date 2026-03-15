@@ -34,6 +34,9 @@ export interface AppStatus {
   block_reason: string | null
 }
 
+export const connectApp = (appId: string) =>
+  api.post<AppProfile>(`/api/apps/${appId}/connect`).then((r) => r.data)
+
 export const getAppStatus = (appId: string) =>
   api.get<AppStatus>(`/api/apps/${appId}/status`).then((r) => r.data)
 

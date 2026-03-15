@@ -135,8 +135,9 @@ def reset_app(app_id: str, db: SessionDep) -> dict:
         for signal in signals:
             db.delete(signal)
 
-    # Reset trust score to seed value
+    # Reset trust score to seed value and deactivate (so consumer must re-connect)
     app.trust_score = _SEED_TRUST_SCORES.get(app_id, 1.0)
+    app.is_active = False
     db.add(app)
 
     db.commit()

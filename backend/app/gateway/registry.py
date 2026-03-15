@@ -89,6 +89,23 @@ def get_app_calls(
     return list(calls)
 
 
+@router.post("/{app_id}/connect", response_model=AppProfile)
+def connect_app(app_id: str, session: SessionDep) -> AppProfile:
+    """Activate an inactive app — used by the consumer to connect a new third-party app."""
+    app = session.exec(
+        select(AppProfile).where(AppProfile.app_id == app_id)
+    ).first()
+
+    if not app:
+        raise HTTPException(status_code=404, detail=f"App '{app_id}' not found")
+
+    app.is_active = True
+    session.add(app)
+    session.commit()
+    session.refresh(app)
+    return app
+
+
 @router.post("", response_model=AppProfile, status_code=201)
 def register_app(app_data: AppCreateRequest, session: SessionDep) -> AppProfile:
     """Register a new third-party app. app_id must be unique."""
