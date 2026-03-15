@@ -4,6 +4,7 @@ import Landing from '@/views/Landing'
 import ConsumerDashboard from '@/views/ConsumerDashboard'
 import AnalystDashboard from '@/views/AnalystDashboard'
 import DemoScenarios from '@/views/Demo'
+import AttackerView from '@/views/AttackerView'
 
 export default function App() {
   return (
@@ -15,6 +16,8 @@ export default function App() {
           <Route path="analyst" element={<AnalystDashboard />} />
           <Route path="demo" element={<DemoScenarios />} />
         </Route>
+        {/* Standalone route — no nav, judge-only access */}
+        <Route path="/attacker" element={<AttackerView />} />
       </Routes>
     </BrowserRouter>
   )
